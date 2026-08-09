@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useCallback } from "react";
 import { useState } from "react";
 import axios from "axios";
 import { useLocation as useReactRouterLocation } from "react-router-dom";
@@ -23,6 +23,17 @@ import humidity from "../img/icons/humidity.png";
 import wind from "../img/icons/wind-turbine.png";
 import sunrise from "../img/icons/sunrise.png";
 import sunset from "../img/icons/sunset.png";
+
+// Used when geolocation is denied or unavailable, so the app still has
+// something to show instead of getting stuck on "Failed to fetch weather data".
+const FALLBACK_LOCATION = { latitude: 1.3107, longitude: 36.825 };
+
+const currentDayTime = () => {
+  let dayTime = new Date();
+  const currentDate = dayTime.toISOString().slice(0, 10);
+  const currentTime = dayTime.toTimeString().slice(0, 8);
+  return `${currentDate} ${currentTime}`;
+};
 
 function Home({ weatherMain }) {
   const [loading, setLoading] = useState(false);
@@ -49,223 +60,182 @@ function Home({ weatherMain }) {
   const [times, setTimes] = useState([]);
   const reactRouterLocation = useReactRouterLocation();
 
-  useEffect(() => {
-    const params = new URLSearchParams(reactRouterLocation.search);
-    const city = params.get("city");
-
-    if (city) {
-      fetchWeatherDataByCity(city);
-    } else if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-        },
-        (error) => {
-          setError(error.message);
-        }
-      );
-    } else {
-      setError("Geolocation is not supported by this browser.");
-    }
-  }, [reactRouterLocation.search]);
-
-  useEffect(() => {
-    if (location.latitude && location.longitude) {
-      fetchWeatherData(location.latitude, location.longitude);
-    }
-  }, [location]);
-
-  const fetchWeatherDataByCity = async (city) => {
-    try {
-      setLoading(true);
-      const apiUrl = `/cityweather?name=${city}&units=${units}`;
-      await axios.get(apiUrl);
-      setLoading(false);
-    } catch (error) {
-      console.error("Error fetching weather data:", error);
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (currentUser) {
-      axios
-        .get(`/favourites?userId=${currentUser.uid}`)
-        .then((result) => {
-          const sortedFavourites = result.data.sort((a, b) => {
-            return a.name.localeCompare(b.name);
-          });
-          setFavourites(sortedFavourites);
-        })
-        .catch((err) => {
-          console.log(err);
-        });
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (clickedFavourites) {
-      handleClick(name);
-      setClickedFavourites(false);
-    }
-  }, [clickedFavourites]);
-
-  //changing units to metric
-  const metric = () => {
-    setUnits("metric");
-    setUnitName({ temp: "C", speed: "Km/h" });
-  };
-
-  //changing units to imperial
-  const imperial = () => {
-    setUnits("imperial");
-    setUnitName({ temp: "F", speed: "Mph" });
-  };
-
-  //Getting the user's Location with permision ofc
-  useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setLocation({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          });
-        },
-        (error) => {
-          setError(error.message);
-        }
-      );
-    } else {
-      setError("Geolocation is not supported by this browser.");
-      setLocation({
-        latitude: 1.3107,
-        longitude: 36.825,
-      });
-    }
-  }, []);
-
-  //Proceeding to fetch the data from the API if granted permission
-  useEffect(() => {
-    if (location) {
-      fetchWeatherData(location.latitude, location.longitude);
-    }
-  }, [location, units]);
-
-  //Making sure that the time and date is being refreshed
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      setCurrentDateTime(new Date());
-    }, 1000);
-    return () => clearInterval(intervalId);
-  }, []);
-
-  const formattedTime = currentDateTime.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-
-  const currentDayTime = () => {
-    let dayTime = new Date();
-    const currentDate = dayTime.toISOString().slice(0, 10);
-    const currentTime = dayTime.toTimeString().slice(0, 8);
-    return `${currentDate} ${currentTime}`;
-  };
-
-  useEffect(() => {
-    const currentHour = new Date().getHours();
-    if (currentHour >= 6 && currentHour < 18) {
-      setBgClass("morning-bg");
-    } else {
-      setBgClass("night-bg");
-    }
-  }, []);
+  const fetchWeatherDataByCity = useCallback(
+    async (city) => {
+      try {
+        setLoading(true);
+        const apiUrl = `/cityweather?name=${city}&units=${units}`;
+        await axios.get(apiUrl);
+        setLoading(false);
+      } catch (error) {
+        console.error("Error fetching weather data:", error);
+        setLoading(false);
+      }
+    },
+    [units]
+  );
 
   //Data from the API being processed
-  const fetchWeatherData = async (lat, long) => {
-    try {
-      setLoading(true);
-      const apiUrl = `/weather?lat=${lat}&lon=${long}&units=${units}`;
-      const apiUrl2 = `/forecast?lat=${lat}&lon=${long}&units=${units}`;
+  const fetchWeatherData = useCallback(
+    async (lat, long) => {
+      try {
+        setLoading(true);
+        const apiUrl = `/weather?lat=${lat}&lon=${long}&units=${units}`;
+        const apiUrl2 = `/forecast?lat=${lat}&lon=${long}&units=${units}`;
 
-      const [response, response2] = await Promise.all([
-        axios.get(apiUrl),
-        axios.get(apiUrl2),
-      ]);
+        const [response, response2] = await Promise.all([
+          axios.get(apiUrl),
+          axios.get(apiUrl2),
+        ]);
 
-      console.log(response);
-      console.log(response2);
+        console.log(response);
+        console.log(response2);
 
-      const weatherMain = response.data.weather[0].main;
-      const weatherDescription = response.data.weather[0].main.description;
-      const forecastWeather = response2.data.list.slice(0, 40);
+        const weatherMain = response.data.weather[0].main;
+        const weatherDescription = response.data.weather[0].main.description;
+        const forecastWeather = response2.data.list.slice(0, 40);
 
-      const timeDay = currentDayTime();
-      const getDayOrNight = (timeDay) => {
-        const time = new Date(timeDay);
-        const hours = time.getHours();
-        return hours >= 6 && hours < 18 ? "day" : "night";
-      };
-      const timeOfDay = getDayOrNight(timeDay);
+        const timeDay = currentDayTime();
+        const getDayOrNight = (timeDay) => {
+          const time = new Date(timeDay);
+          const hours = time.getHours();
+          return hours >= 6 && hours < 18 ? "day" : "night";
+        };
+        const timeOfDay = getDayOrNight(timeDay);
 
-      const today = new Date();
-      const todayDate = new Date().toISOString().split("T")[0];
+        const today = new Date();
+        const todayDate = new Date().toISOString().split("T")[0];
 
-      const tomorrowDate = (() => {
-        const tomorrow = new Date();
-        tomorrow.setDate(today.getDate() + 1);
-        return tomorrow.toISOString().split("T")[0];
-      })();
+        const tomorrowDate = (() => {
+          const tomorrow = new Date();
+          tomorrow.setDate(today.getDate() + 1);
+          return tomorrow.toISOString().split("T")[0];
+        })();
 
-      //forecasted data for the day
-      const processedForecastData = forecastWeather
-        .map((forecast) => {
-          const getDayOrNight = (dateString) => {
-            const time = new Date(dateString);
-            const hours = time.getHours();
-            return hours >= 6 && hours < 18 ? "day" : "night";
-          };
+        //forecasted data for the day
+        const processedForecastData = forecastWeather
+          .map((forecast) => {
+            const getDayOrNight = (dateString) => {
+              const time = new Date(dateString);
+              const hours = time.getHours();
+              return hours >= 6 && hours < 18 ? "day" : "night";
+            };
 
-          const dateString = forecast.dt_txt;
-          const forecastDate = new Date(dateString).toISOString().split("T")[0];
-          const timeOfDay = getDayOrNight(dateString);
+            const dateString = forecast.dt_txt;
+            const forecastDate = new Date(dateString)
+              .toISOString()
+              .split("T")[0];
+            const timeOfDay = getDayOrNight(dateString);
 
-          let formattedDateString = new Date(dateString).toLocaleDateString(
-            "en-GB",
-            {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-              weekday: "short",
-            }
-          );
+            let formattedDateString = new Date(dateString).toLocaleDateString(
+              "en-GB",
+              {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+                weekday: "short",
+              }
+            );
 
-          const formattedTimeString = new Date(dateString).toLocaleTimeString(
-            "en-GB",
-            {
+            const formattedTimeString = new Date(
+              dateString
+            ).toLocaleTimeString("en-GB", {
               hour: "2-digit",
               minute: "2-digit",
               hour12: true,
+            });
+
+            const description =
+              forecast.weather[0].description.charAt(0).toUpperCase() +
+              forecast.weather[0].description.slice(1).toLowerCase();
+
+            const weatherMain = forecast.weather[0].main;
+            const weatherDescription = forecast.weather[0].main.description;
+
+            if (forecastDate === todayDate) {
+              return {
+                celcius: forecast.main.temp,
+                name: response2.data.city.name,
+                humidity: forecast.main.humidity,
+                speed: forecast.wind.speed,
+                image: (
+                  <WeatherIcon
+                    weatherMain={weatherMain}
+                    weatherDescription={weatherDescription}
+                    timeOfDay={timeOfDay}
+                  />
+                ),
+                description: description,
+                country: response2.data.city.country,
+                date: formattedDateString,
+                time: formattedTimeString,
+              };
+            } else {
+              return null;
             }
-          );
+          })
+          .filter(Boolean);
 
-          const description =
-            forecast.weather[0].description.charAt(0).toUpperCase() +
-            forecast.weather[0].description.slice(1).toLowerCase();
+        const groupedData = forecastWeather.reduce((acc, forecast) => {
+          if (forecast.dt_txt) {
+            // Ensure dt_txt exists
+            const dateString = forecast.dt_txt.split(" ")[0];
+            if (!acc[dateString]) {
+              acc[dateString] = [];
+            }
+            acc[dateString].push(forecast);
+          }
+          return acc;
+        }, {});
 
-          const weatherMain = forecast.weather[0].main;
-          const weatherDescription = forecast.weather[0].main.description;
+        const processedForecastData2 = Object.keys(groupedData).map(
+          (date) => {
+            const dateString = "2024-06-04 12:00:00";
+            const getDayOrNight = (dateString) => {
+              const time = new Date(dateString);
+              const hours = time.getHours();
+              return hours >= 6 && hours < 18 ? "day" : "night";
+            };
+            const timeOfDay = getDayOrNight(dateString);
+            const dayForecasts = groupedData[date];
+            const total = dayForecasts.reduce(
+              (acc, forecast) => {
+                acc.temp += forecast.main.temp;
+                acc.wind += forecast.wind.speed;
+                acc.humidity += forecast.main.humidity;
+                return acc;
+              },
+              { temp: 0, wind: 0, humidity: 0 }
+            );
 
-          if (forecastDate === todayDate) {
+            const averageTemp = total.temp / dayForecasts.length;
+            const averageHumidity = total.humidity / dayForecasts.length;
+            const averageWind = total.wind / dayForecasts.length;
+
+            let formattedDateString = "";
+            if (date === todayDate) {
+              formattedDateString = "Today";
+            } else if (date === tomorrowDate) {
+              formattedDateString = "Tomorrow";
+            } else {
+              formattedDateString = new Date(date).toLocaleDateString(
+                "en-US",
+                {
+                  month: "2-digit",
+                  day: "2-digit",
+                }
+              );
+            }
+
+            const description =
+              dayForecasts[0].weather[0].description.charAt(0).toUpperCase() +
+              dayForecasts[0].weather[0].description.slice(1).toLowerCase();
+
+            const weatherMain = dayForecasts[0].weather[0].main;
+            const weatherDescription = dayForecasts[0].weather[0].description;
+
             return {
-              celcius: forecast.main.temp,
-              name: response2.data.city.name,
-              humidity: forecast.main.humidity,
-              speed: forecast.wind.speed,
+              day: formattedDateString,
               image: (
                 <WeatherIcon
                   weatherMain={weatherMain}
@@ -273,73 +243,33 @@ function Home({ weatherMain }) {
                   timeOfDay={timeOfDay}
                 />
               ),
+              averageTemp: averageTemp.toFixed(1),
+              averageWind: averageWind.toFixed(1),
+              averageHumidity: averageHumidity.toFixed(1),
               description: description,
-              country: response2.data.city.country,
-              date: formattedDateString,
-              time: formattedTimeString,
             };
-          } else {
-            return null;
           }
-        })
-        .filter(Boolean);
-
-      const groupedData = forecastWeather.reduce((acc, forecast) => {
-        if (forecast.dt_txt) {
-          // Ensure dt_txt exists
-          const dateString = forecast.dt_txt.split(" ")[0];
-          if (!acc[dateString]) {
-            acc[dateString] = [];
-          }
-          acc[dateString].push(forecast);
-        }
-        return acc;
-      }, {});
-
-      const processedForecastData2 = Object.keys(groupedData).map((date) => {
-        const dateString = "2024-06-04 12:00:00";
-        const getDayOrNight = (dateString) => {
-          const time = new Date(dateString);
-          const hours = time.getHours();
-          return hours >= 6 && hours < 18 ? "day" : "night";
-        };
-        const timeOfDay = getDayOrNight(dateString);
-        const dayForecasts = groupedData[date];
-        const total = dayForecasts.reduce(
-          (acc, forecast) => {
-            acc.temp += forecast.main.temp;
-            acc.wind += forecast.wind.speed;
-            acc.humidity += forecast.main.humidity;
-            return acc;
-          },
-          { temp: 0, wind: 0, humidity: 0 }
         );
 
-        const averageTemp = total.temp / dayForecasts.length;
-        const averageHumidity = total.humidity / dayForecasts.length;
-        const averageWind = total.wind / dayForecasts.length;
+        setTodaysData(processedForecastData);
+        setData2(processedForecastData2);
 
-        let formattedDateString = "";
-        if (date === todayDate) {
-          formattedDateString = "Today";
-        } else if (date === tomorrowDate) {
-          formattedDateString = "Tomorrow";
-        } else {
-          formattedDateString = new Date(date).toLocaleDateString("en-US", {
-            month: "2-digit",
-            day: "2-digit",
-          });
-        }
+        const sunrise = new Date(
+          response.data.sys.sunrise * 1000
+        ).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+        const sunset = new Date(
+          response.data.sys.sunset * 1000
+        ).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
 
         const description =
-          dayForecasts[0].weather[0].description.charAt(0).toUpperCase() +
-          dayForecasts[0].weather[0].description.slice(1).toLowerCase();
+          response.data.weather[0].description.charAt(0).toUpperCase() +
+          response.data.weather[0].description.slice(1).toLowerCase();
 
-        const weatherMain = dayForecasts[0].weather[0].main;
-        const weatherDescription = dayForecasts[0].weather[0].description;
-
-        return {
-          day: formattedDateString,
+        setData({
+          celcius: response.data.main.temp,
+          name: response.data.name,
+          humidity: response.data.main.humidity,
+          speed: response.data.wind.speed,
           image: (
             <WeatherIcon
               weatherMain={weatherMain}
@@ -347,70 +277,39 @@ function Home({ weatherMain }) {
               timeOfDay={timeOfDay}
             />
           ),
-          averageTemp: averageTemp.toFixed(1),
-          averageWind: averageWind.toFixed(1),
-          averageHumidity: averageHumidity.toFixed(1),
           description: description,
-        };
-      });
-
-      setTodaysData(processedForecastData);
-      setData2(processedForecastData2);
-
-      const sunrise = new Date(
-        response.data.sys.sunrise * 1000
-      ).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-      const sunset = new Date(
-        response.data.sys.sunset * 1000
-      ).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-
-      const description =
-        response.data.weather[0].description.charAt(0).toUpperCase() +
-        response.data.weather[0].description.slice(1).toLowerCase();
-
-      setData({
-        celcius: response.data.main.temp,
-        name: response.data.name,
-        humidity: response.data.main.humidity,
-        speed: response.data.wind.speed,
-        image: (
-          <WeatherIcon
-            weatherMain={weatherMain}
-            weatherDescription={weatherDescription}
-            timeOfDay={timeOfDay}
-          />
-        ),
-        description: description,
-        country: response.data.sys.country,
-        tempMax: response.data.main.temp_max,
-        tempMin: response.data.main.temp_min,
-        feelsLike: response.data.main.feels_like,
-        sunrise: sunrise,
-        sunset: sunset,
-      });
-      setLoading(false);
-      setError("");
-    } catch (error) {
-      setLoading(false);
-      if (error.response && error.response.status === 404) {
-        setError("City not found. Please try again.");
-      } else {
-        setError("Failed to fetch weather data.");
+          country: response.data.sys.country,
+          tempMax: response.data.main.temp_max,
+          tempMin: response.data.main.temp_min,
+          feelsLike: response.data.main.feels_like,
+          sunrise: sunrise,
+          sunset: sunset,
+        });
+        setLoading(false);
+        setError("");
+      } catch (error) {
+        setLoading(false);
+        if (error.response && error.response.status === 404) {
+          setError("City not found. Please try again.");
+        } else {
+          setError("Failed to fetch weather data.");
+        }
+        console.error("Error fetching weather data:", error);
       }
-      console.error("Error fetching weather data:", error);
-    }
-  };
+    },
+    [units]
+  );
 
   //Adjusting the UI according to the user's search input
-  const handleClick = async () => {
+  const handleClick = useCallback(async () => {
     if (name !== "") {
       setLoading(true);
       const apiUrl = `/cityweather?name=${encodeURIComponent(
         name
-      )}&units=metric`;
+      )}&units=${units}`;
       const apiForecast = `/cityforecast?name=${encodeURIComponent(
         name
-      )}&units=metric`;
+      )}&units=${units}`;
 
       try {
         const [currentWeatherResponse, forecastWeatherResponse] =
@@ -581,63 +480,68 @@ function Home({ weatherMain }) {
           return acc;
         }, {});
 
-        const processedForecastData2 = Object.keys(groupedData).map((date) => {
-          const dateString = "2024-06-04 12:00:00";
-          const getDayOrNight = (dateString) => {
-            const time = new Date(dateString);
-            const hours = time.getHours();
-            return hours >= 6 && hours < 18 ? "day" : "night";
-          };
-          const timeOfDay = getDayOrNight(dateString);
-          const dayForecasts = groupedData[date];
-          const total = dayForecasts.reduce(
-            (acc, forecast) => {
-              acc.temp += forecast.main.temp;
-              acc.wind += forecast.wind.speed;
-              acc.humidity += forecast.main.humidity;
-              return acc;
-            },
-            { temp: 0, wind: 0, humidity: 0 }
-          );
+        const processedForecastData2 = Object.keys(groupedData).map(
+          (date) => {
+            const dateString = "2024-06-04 12:00:00";
+            const getDayOrNight = (dateString) => {
+              const time = new Date(dateString);
+              const hours = time.getHours();
+              return hours >= 6 && hours < 18 ? "day" : "night";
+            };
+            const timeOfDay = getDayOrNight(dateString);
+            const dayForecasts = groupedData[date];
+            const total = dayForecasts.reduce(
+              (acc, forecast) => {
+                acc.temp += forecast.main.temp;
+                acc.wind += forecast.wind.speed;
+                acc.humidity += forecast.main.humidity;
+                return acc;
+              },
+              { temp: 0, wind: 0, humidity: 0 }
+            );
 
-          const averageTemp = total.temp / dayForecasts.length;
-          const averageHumidity = total.humidity / dayForecasts.length;
-          const averageWind = total.wind / dayForecasts.length;
+            const averageTemp = total.temp / dayForecasts.length;
+            const averageHumidity = total.humidity / dayForecasts.length;
+            const averageWind = total.wind / dayForecasts.length;
 
-          let formattedDateString = "";
-          if (date === todayDate) {
-            formattedDateString = "Today";
-          } else if (date === tomorrowDate) {
-            formattedDateString = "Tomorrow";
-          } else {
-            formattedDateString = new Date(date).toLocaleDateString("en-US", {
-              month: "2-digit",
-              day: "2-digit",
-            });
+            let formattedDateString = "";
+            if (date === todayDate) {
+              formattedDateString = "Today";
+            } else if (date === tomorrowDate) {
+              formattedDateString = "Tomorrow";
+            } else {
+              formattedDateString = new Date(date).toLocaleDateString(
+                "en-US",
+                {
+                  month: "2-digit",
+                  day: "2-digit",
+                }
+              );
+            }
+
+            const description =
+              dayForecasts[0].weather[0].description.charAt(0).toUpperCase() +
+              dayForecasts[0].weather[0].description.slice(1).toLowerCase();
+
+            const weatherMain = dayForecasts[0].weather[0].main;
+            const weatherDescription = dayForecasts[0].weather[0].description;
+
+            return {
+              day: formattedDateString,
+              image: (
+                <WeatherIcon
+                  weatherMain={weatherMain}
+                  weatherDescription={weatherDescription}
+                  timeOfDay={timeOfDay}
+                />
+              ),
+              averageTemp: averageTemp.toFixed(1),
+              averageWind: averageWind.toFixed(1),
+              averageHumidity: averageHumidity.toFixed(1),
+              description: description,
+            };
           }
-
-          const description =
-            dayForecasts[0].weather[0].description.charAt(0).toUpperCase() +
-            dayForecasts[0].weather[0].description.slice(1).toLowerCase();
-
-          const weatherMain = dayForecasts[0].weather[0].main;
-          const weatherDescription = dayForecasts[0].weather[0].description;
-
-          return {
-            day: formattedDateString,
-            image: (
-              <WeatherIcon
-                weatherMain={weatherMain}
-                weatherDescription={weatherDescription}
-                timeOfDay={timeOfDay}
-              />
-            ),
-            averageTemp: averageTemp.toFixed(1),
-            averageWind: averageWind.toFixed(1),
-            averageHumidity: averageHumidity.toFixed(1),
-            description: description,
-          };
-        });
+        );
 
         setTodaysData(processedForecastData);
         setData2(processedForecastData2);
@@ -653,47 +557,146 @@ function Home({ weatherMain }) {
         console.error("Error fetching weather data:", error);
       }
     }
-  };
+  }, [name, units, loading, showTime]);
 
   //the Line Graph for visualization
-  const weeklyGraph = (action) => {
-    let key;
-    if (action === "temp") {
-      key = "Temperature";
-    } else if (action === "humidity") {
-      key = "Humidity";
-    } else if (action === "wind") {
-      key = "Wind";
-    }
+  const weeklyGraph = useCallback(
+    (action) => {
+      let key;
+      if (action === "temp") {
+        key = "Temperature";
+      } else if (action === "humidity") {
+        key = "Humidity";
+      } else if (action === "wind") {
+        key = "Wind";
+      }
 
-    if (!Array.isArray(data2) || data2.length === 0) {
-      console.error("Data is not an array or is empty");
+      if (!Array.isArray(data2) || data2.length === 0) {
+        console.error("Data is not an array or is empty");
+        return;
+      }
+
+      const weekWeather = data2.map((dayData) => ({
+        day: dayData.day,
+        temp: dayData.averageTemp,
+        wind: dayData.averageWind,
+        humidity: dayData.averageHumidity,
+      }));
+
+      const updatedWeeklyWeatherData = weekWeather.map((dayData) => ({
+        name: dayData.day,
+        Temperature: dayData.temp,
+        Humidity: dayData.humidity,
+        Wind: dayData.wind,
+      }));
+
+      setWeeklyData(updatedWeeklyWeatherData);
+      setDataKey(key);
+    },
+    [data2]
+  );
+
+  //Read ?city= from the URL, or fall back to geolocation (and if that's
+  //denied or unavailable, fall back further to a default city).
+  useEffect(() => {
+    const params = new URLSearchParams(reactRouterLocation.search);
+    const city = params.get("city");
+
+    if (city) {
+      fetchWeatherDataByCity(city);
       return;
     }
 
-    const weekWeather = data2.map((dayData) => ({
-      day: dayData.day,
-      temp: dayData.averageTemp,
-      wind: dayData.averageWind,
-      humidity: dayData.averageHumidity,
-    }));
+    if (!navigator.geolocation) {
+      setError("Geolocation is not supported by this browser.");
+      setLocation(FALLBACK_LOCATION);
+      return;
+    }
 
-    const updatedWeeklyWeatherData = weekWeather.map((dayData) => ({
-      name: dayData.day,
-      Temperature: dayData.temp,
-      Humidity: dayData.humidity,
-      Wind: dayData.wind,
-    }));
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocation({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+      },
+      (geoError) => {
+        setError(geoError.message);
+        setLocation(FALLBACK_LOCATION);
+      }
+    );
+  }, [reactRouterLocation.search, fetchWeatherDataByCity]);
 
-    setWeeklyData(updatedWeeklyWeatherData);
-    setDataKey(key);
+  //Fetch the weather whenever the location or the chosen units change.
+  useEffect(() => {
+    if (location.latitude && location.longitude) {
+      fetchWeatherData(location.latitude, location.longitude);
+    }
+  }, [location, units, fetchWeatherData]);
+
+  useEffect(() => {
+    if (currentUser) {
+      axios
+        .get(`/favourites?userId=${currentUser.uid}`)
+        .then((result) => {
+          const sortedFavourites = result.data.sort((a, b) => {
+            return a.name.localeCompare(b.name);
+          });
+          setFavourites(sortedFavourites);
+        })
+        .catch((err) => {
+          console.log(err);
+        });
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (clickedFavourites) {
+      handleClick();
+      setClickedFavourites(false);
+    }
+  }, [clickedFavourites, handleClick]);
+
+  //changing units to metric
+  const metric = () => {
+    setUnits("metric");
+    setUnitName({ temp: "C", speed: "Km/h" });
   };
+
+  //changing units to imperial
+  const imperial = () => {
+    setUnits("imperial");
+    setUnitName({ temp: "F", speed: "Mph" });
+  };
+
+  //Making sure that the time and date is being refreshed
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setCurrentDateTime(new Date());
+    }, 1000);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const formattedTime = currentDateTime.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  useEffect(() => {
+    const currentHour = new Date().getHours();
+    if (currentHour >= 6 && currentHour < 18) {
+      setBgClass("morning-bg");
+    } else {
+      setBgClass("night-bg");
+    }
+  }, []);
 
   useEffect(() => {
     if (data2.length > 0) {
       weeklyGraph("temp");
     }
-  }, [data2]);
+  }, [data2, weeklyGraph]);
 
   //function to display the condition names
   const dataKeyName = (dataKey) => {
