@@ -93,7 +93,7 @@ function Home({ weatherMain }) {
   useEffect(() => {
     if (currentUser) {
       axios
-        .get(`/favourites/${currentUser.uid}`)
+        .get(`/favourites?userId=${currentUser.uid}`)
         .then((result) => {
           const sortedFavourites = result.data.sort((a, b) => {
             return a.name.localeCompare(b.name);
@@ -724,7 +724,7 @@ function Home({ weatherMain }) {
   //Adding a favourite city to the db
   const addToFavourites = (name) => {
     axios
-      .post(`/addFavourite`, {
+      .post(`/favourites`, {
         userId: currentUser.uid,
         name,
       })
@@ -744,7 +744,7 @@ function Home({ weatherMain }) {
   //Removing a favourite city from the db
   const removeFromFavourites = async (id) => {
     try {
-      await axios.delete(`/removeFavourite/${id}`);
+      await axios.delete(`/favourites?id=${id}`);
       setFavourites((prevFavourites) =>
         prevFavourites.filter((fav) => fav._id !== id)
       );

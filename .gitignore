@@ -25,3 +25,5 @@ yarn-error.log*
 
 # secrets
 serviceAccountKey.json
+.vercel
+.env*

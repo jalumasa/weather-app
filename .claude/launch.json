@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "weatherapp-frontend",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["start"],
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vercel", "dev", "--yes"],
       "port": 3000,
       "autoPort": true
     }
