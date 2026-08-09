@@ -1,0 +1,26 @@
+{
+    "weather": [
+      {
+        "main": "Clear",
+        "description": "clear sky"
+      }
+    ],
+    "main": {
+      "temp": 23.15,
+      "feels_like": 24.13,
+      "temp_min": 26.04,
+      "temp_max": 22.26,
+      "pressure": 1013,
+      "humidity": 60
+    },
+    "wind": {
+      "speed": "10"
+    },
+    "sys": {
+      "country": "US",
+      "sunrise": 1627382443,
+      "sunset": 1627434143
+    },
+    "name": "New York"
+  }
+  

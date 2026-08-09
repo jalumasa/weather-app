@@ -1,0 +1,24 @@
+{
+  "city": {
+    "name": "New York",
+    "country": "US"
+  },
+  "list": [
+    {
+      "dt_txt": "2024-08-01 12:00:00",
+      "main": {
+        "temp": 24.67,
+        "humidity": 60
+      },
+      "weather": [
+        {
+          "main": "Clear",
+          "description": "clear sky"
+        }
+      ],
+      "wind": {
+        "speed": 10
+      }
+    }
+  ]
+}

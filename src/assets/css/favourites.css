@@ -1,0 +1,159 @@
+.favourites-container {
+    display: flex;
+    flex-direction: column; /* Cards stack vertically */
+    gap: 16px;
+    padding: 16px;
+    align-items: center;
+    background-color: transparent; /* Remove background color from container */
+  }
+  
+  .favourite-card {
+    position: relative;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 16px;
+    margin: 10px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    width: 80%; /* Updated to take up 80% of the width of the screen */
+    max-width: 800px; 
+    height: 150px; 
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    overflow: hidden;
+  }
+  
+  .favourite-card:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+  }
+  
+  .favourite-card img {
+    display: none;
+  }
+  
+  .favourite-card h2 {
+    z-index: 1; /* Ensures the text appears above the image */
+    margin: 0;
+  }
+  
+  .favourite-card p {
+    margin: 0;
+  }
+  
+  .sunny-background {
+    background-image: url('../../img/icons/sun.png');
+    background-color: #ccb94d; /* Gold for sunny */
+  }
+  
+  .clear-night-background {
+    background-image: url('../../img/icons/calm\ night.png');
+    background-color: #2F4F4F; /* Dark Slate Gray for clear night */
+  }
+  
+  .few-clouds-background {
+    background-image: url('../../img/icons/cloud\ and\ sun.png');
+    background-color: #F0E68C; /* Khaki for few clouds */
+  }
+  
+  .scattered-clouds-background {
+    background-image: url('../../img/icons/sun\ and\ scattered\ clouds.png');
+    background-color: #D3D3D3; /* Light Gray for scattered clouds */
+  }
+  
+  .broken-clouds-background {
+    background-image: url('../../img/icons/broken\ clouds.png');
+    background-color: #A9A9A9; /* Dark Gray for broken clouds */
+  }
+  
+  .overcast-clouds-background {
+    background-image: url('../../img/icons/overcast\ clouds.png');
+    background-color: #696969; /* Dim Gray for overcast clouds */
+  }
+  
+  .cloudy-background {
+    background-image: url('../../img/icons/cloud\ and\ sun.png');
+    background-color: #C0C0C0; /* Silver for cloudy */
+  }
+  
+  .cloudy-night-background {
+    background-image: url('../../img/icons/night-cloud.png');
+    background-color: #778899; /* Light Slate Gray for cloudy night */
+  }
+  
+  .light-rain-background {
+    background-image: url('../../img/icons/light\ rain.png');
+    background-color: #ADD8E6; /* Light Blue for light rain */
+  }
+  
+  .light-rain-night-background {
+    background-image: url('../../img/icons/night-rain.png');
+    background-color: #4682B4; /* Steel Blue for light rain night */
+  }
+  
+  .moderate-rain-background {
+    background-image: url('../../img/icons/moderate-rain.png');
+    background-color: #5F9EA0; /* Cadet Blue for moderate rain */
+  }
+  
+  .moderate-rain-night-background {
+    background-image: url('../../img/icons/night-rain.png');
+    background-color: #4682B4; /* Steel Blue for moderate rain night */
+  }
+  
+  .heavy-rain-background {
+    background-image: url('../../img/icons/heavy-intensity-rain.png');
+    background-color: #1E90FF; /* Dodger Blue for heavy rain */
+  }
+  
+  .heavy-rain-night-background {
+    background-image: url('../../img/icons/heavy-rainy-night.png');
+    background-color: #00008B; /* Dark Blue for heavy rain night */
+  }
+  
+  .shower-rain-background {
+    background-image: url('../../img/icons/shower.png');
+    background-color: #87CEEB; /* Sky Blue for shower rain */
+  }
+  
+  .shower-rain-night-background {
+    background-image: url('../../img/icons/rainy\ night.png');
+    background-color: #191970; /* Midnight Blue for shower rain night */
+  }
+  
+  .drizzle-background {
+    background-image: url('../../img/icons/drizzle.png');
+    background-color: #B0E0E6; /* Powder Blue for drizzle */
+  }
+  
+  .foggy-background {
+    background-image: url('../../img/icons/foggy-day.png');
+    background-color: #696969; /* Dim Gray for foggy */
+  }
+  
+  .foggy-night-background {
+    background-image: url('../../img/icons/foggy-night.png');
+    background-color: #2F4F4F; /* Dark Slate Gray for foggy night */
+  }
+  
+  .default-background {
+    background-image: url('../../img/icons/sun.png');
+    background-color: #FFD700; /* Gold for default sunny */
+  }
+  
+  @media (max-width: 600px) {
+    .favourites-container {
+      padding: 8px;
+    }
+    .favourite-card {
+      width: 100%; /* Ensure full width on small screens */
+      height: 100px; /* Adjust height for small screens */
+    }
+  }
+  

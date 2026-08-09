@@ -1,0 +1,73 @@
+.graph-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    background-color: #0b375e38;
+    border-radius: 15px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .button-container {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  
+  .graph-button-wind,
+  .graph-button-humidity,
+  .graph-button-temp {
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    border-radius: 10px;
+    transition: background-color 0.3s;
+    cursor: pointer;
+  }
+  
+  .graph-button-wind {
+    background-color: #4caf50;
+  }
+  .graph-button-humidity {
+    background-color: #2885f0;
+  }
+  .graph-button-temp {
+    background-color: #a80202;
+  }
+  .graph-button:hover {
+    background-color: #d20505;
+  }
+  
+  .graph-title {
+    font-family: "Comic Sans MS", cursive, sans-serif;
+    color: #333;
+    margin-bottom: 20px;
+  }
+  
+  .chart-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .recharts-cartesian-axis-tick {
+    fill: #333; /* Change color for both x and y axis labels */
+  }
+  
+  .recharts-cartesian-axis-label {
+    fill: #333; /* Change color for axis label texts */
+  }
+  
+  /* Specific example for XAxis label */
+  .recharts-x-axis .recharts-cartesian-axis-tick {
+    fill: #333; /* Change color for XAxis tick labels */
+  }
+  
+  /* Specific example for YAxis label */
+  .recharts-y-axis .recharts-cartesian-axis-tick {
+    fill: #333; /* Change color for YAxis tick labels */
+  }

@@ -1,0 +1,62 @@
+.details {
+    display: flex;
+    justify-content: space-around;
+    gap: 20px;
+    padding: 20px;
+    background: linear-gradient(135deg, #324a5a, #1c3cd8);
+    border-radius: 15px;
+    color: white;
+    flex-direction: column;
+    flex-wrap: wrap-reverse;
+  }
+  
+  .details > div {
+    align-items: center;
+    text-align: center;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    transition: transform 0.3s;
+  }
+  
+  .details > div:hover {
+    transform: scale(1.05);
+  }
+  
+  .icon-image {
+    width: 130px;
+    height: 110px;
+    object-fit: contain;
+  }
+  
+  .humidity,
+  .wind,
+  .sunrise-sunset {
+    margin-top: 10px;
+  }
+  
+  .sunrise-sunset {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .sunrise-sunset img {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+  }
+  
+  .humidity-value,
+  .wind-speed {
+    font-size: 2em;
+    font-weight: bold;
+  }
+  
+  p {
+    margin: 5px 0;
+  }
+  .humidity,
+  .wind {
+    font-size: 20px;
+  }
