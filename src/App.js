@@ -11,11 +11,9 @@ import Login from "./pages/login";
 import SignUp from "./pages/signup";
 import Navbar from "./source/navbar"
 
-axios.defaults.baseURL = "http://localhost:3001/RainCoat/";
+axios.defaults.baseURL =
+  process.env.REACT_APP_API_URL || "http://localhost:3001/RainCoat/";
 axios.defaults.withCredentials = true;
-
-//http://localhost:3001/RainCoat/
-//https://rain-coat-back.vercel.app/RainCoat/
 
 function App() {
   return (
