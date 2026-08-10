@@ -1,7 +1,3 @@
-body {
-  background: linear-gradient(130deg, rgb(34, 34, 120), rgb(74, 74, 144));
-}
-
 .error {
   color: rgb(240, 247, 247);
   text-align: left;
@@ -11,22 +7,6 @@ body {
 .favourites {
   border: none;
   background-color: #007bff00;
-}
-
-nav {
-  display: flex;
-  background-color: #eee; /* Optional background color */
-}
-
-nav a {
-  padding: 1rem 2rem; /* Adjust padding as needed */
-  text-decoration: none; /* Remove underline */
-  color: #333; /* Text color */
-}
-
-nav a.active {
-  font-weight: bold; /* Style for active link */
-  color: #000; /* Text color for active link */
 }
 
 #left,

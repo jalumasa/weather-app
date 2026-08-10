@@ -13,9 +13,18 @@ import Navbar from "./source/navbar"
 
 axios.defaults.baseURL = "/api/";
 
+// Same day/night atmosphere used by the weather card, hoisted so every page
+// (not just the dashboard) sits on the right gradient.
+const currentHour = new Date().getHours();
+const isDaytime = currentHour >= 6 && currentHour < 18;
+
 function App() {
   return (
-    <div>
+    <div
+      className={`min-h-screen ${
+        isDaytime ? "bg-gradient-day" : "bg-gradient-night"
+      }`}
+    >
       <AuthProvider>
         <BrowserRouter>
           <Navbar/>

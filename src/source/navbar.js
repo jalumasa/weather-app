@@ -1,7 +1,14 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import "boxicons/css/boxicons.min.css";
+
+const navLinkClasses = ({ isActive }) =>
+  `rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+    isActive
+      ? "bg-white/20 text-white"
+      : "text-white/70 hover:bg-white/10 hover:text-white"
+  }`;
 
 export default function Navbar() {
   const { currentUser, logout } = useAuth();
@@ -15,66 +22,44 @@ export default function Navbar() {
   };
 
   return (
-    <nav
-      style={{
-        backgroundColor: "#f0f0f0",
-        padding: "10px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-      }}
-    >
+    <nav className="sticky top-0 z-50 flex items-center justify-between border-b border-white/20 bg-white/10 px-6 py-3 text-white backdrop-blur-xl">
+      <Link to="/" className="flex items-center gap-2">
+        <i className="bx bxs-cloud-rain text-2xl text-sky-300"></i>
+        <span className="bg-gradient-to-r from-sky-300 via-white to-pop-400 bg-clip-text text-lg font-bold text-transparent">
+          RainCoat
+        </span>
+      </Link>
+
       {currentUser ? (
-        <div>
-          <Link
-            style={{
-              marginRight: "10px",
-              color: "#333",
-              textDecoration: "none",
-            }}
-            to="/"
-          >
+        <div className="flex items-center gap-1">
+          <NavLink to="/" end className={navLinkClasses}>
             Home
-          </Link>
-          <Link
-            style={{
-              marginRight: "10px",
-              color: "#333",
-              textDecoration: "none",
-            }}
-            to="/favourites"
-          >
+          </NavLink>
+          <NavLink to="/favourites" className={navLinkClasses}>
             Favourite Cities
-          </Link>
+          </NavLink>
         </div>
       ) : null}
-      <div style={{ display: "flex", alignItems: "center" }}>
+
+      <div className="flex items-center gap-3">
         {currentUser ? (
-          <div style={{ display: "flex", alignItems: "center" }}>
+          <>
             <i
-              className="bx bxs-user"
-              style={{
-                fontSize: "24px",
-                marginRight: "10px",
-                cursor: "pointer",
-              }}
+              className="bx bxs-user rounded-full bg-white/10 p-1.5 text-lg"
               title={currentUser.email}
             ></i>
             <button
               onClick={handleLogout}
-              style={{
-                marginLeft: "10px",
-                backgroundColor: "transparent",
-                border: "none",
-                color: "#333",
-                cursor: "pointer",
-              }}
+              className="rounded-full bg-pop-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-pop-600"
             >
               Logout
             </button>
-          </div>
+          </>
         ) : (
-          <Link style={{ color: "#333", textDecoration: "none" }} to="/login">
+          <Link
+            to="/login"
+            className="rounded-full bg-pop-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-pop-600"
+          >
             Login
           </Link>
         )}
