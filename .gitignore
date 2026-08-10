@@ -25,5 +25,8 @@ yarn-error.log*
 
 # secrets
 serviceAccountKey.json
+
+# generated
+src/tailwind.generated.css
 .vercel
 .env*

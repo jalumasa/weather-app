@@ -1,58 +1,6 @@
-.error {
-  color: rgb(240, 247, 247);
-  text-align: left;
-  margin-left: 10px;
-}
-
 .favourites {
   border: none;
   background-color: #007bff00;
-}
-
-#left,
-#middle,
-#right {
-  background: rgba(0, 0, 0, 0);
-  height: auto;
-  padding: 10px;
-  box-sizing: border-box;
-}
-
-#left {
-  float: left;
-  flex: 0 1 34%;
-  width: 30%;
-  margin: 50px auto;
-}
-
-#middle {
-  float: left;
-  background: rgba(0, 128, 0, 0);
-  width: 35%;
-  height: 280px;
-}
-
-#right {
-  float: right;
-  background: rgba(0, 0, 255, 0);
-  width: 20%;
-  height: 280px;
-  margin: 50px auto;
-}
-
-.listed {
-  font-family: "Roboto", sans-serif;
-  cursor: pointer;
-  color: white;
-  padding: 10px;
-  font-size: larger;
-}
-
-.listed-header {
-  font-family: "Roboto", sans-serif;
-  color: white;
-  padding: 10px;
-  text-decoration: underline;
 }
 
 @import url("https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap");

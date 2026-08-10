@@ -1,244 +1,48 @@
-.weather {
-  width: 590px;
-  padding: 0px;
-  border-radius: 10px;
-  margin: 50px auto;
-  text-align: center;
-  color: rgb(255, 255, 255);
-}
-
-.morning-bg {
-  background-image: url("day2.jpg");
-  background-size: 100%;
-  background-repeat: no-repeat;
-  background-size: cover;
-  color: rgb(16, 8, 8);
-  background-position: center;
-  width: 100%;
-  height: 100%;
-}
-
-.night-bg {
-  background-image: url("moony-night.jpg");
-  background-size: 100%;
-  background-repeat: no-repeat;
-  background-size: cover;
-  color: rgb(255, 255, 255);
-  background-position: center;
-  width: 100%;
-  height: 100%;
-}
-
-.forecast-container {
-  display: flex;
-  overflow-x: auto; /* Enables horizontal scrolling */
-  white-space: nowrap; /* Prevents items from wrapping to the next line */
-  padding: 0px; /* Add some padding for better visualization */
-  scroll-snap-type: x mandatory; /* Enables snap scrolling */
-  transition: all 0.2s ease-in-out;
-}
-
-.mini-weather {
-  flex: 0 0 auto; /* Prevents the item from shrinking or growing */
-  width: 100px; /* Set a fixed width for each mini-weather item */
-  margin: 10px; /* Add some space between the mini-weather divs */
-  padding: 10px; /* Add some padding inside the mini-weather divs */
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Add a shadow for better visualization */
-  border-radius: 8px; /* Rounded corners */
-  background-color: #e0e0e000; /* Background color */
-  text-align: center; /* Center the content */
-  scroll-snap-align: start; /* Ensures the item snaps to the start of the container */
-}
-
+/* Horizontal-scroll behavior for the hourly/daily forecast strips.
+   Kept as plain CSS since ::-webkit-scrollbar isn't reachable via Tailwind
+   utilities without a plugin; visual styling of the cards themselves lives
+   in home.js as Tailwind classes. */
+.forecast-container,
 .forecast-container2 {
-  display: flex;
-  overflow-x: auto; /* Enables horizontal scrolling */
-  white-space: nowrap; /* Prevents items from wrapping to the next line */
-  padding: 0px; /* Add some padding for better visualization */
-  scroll-snap-type: x mandatory; /* Enables snap scrolling */
-  transition: all 0.2s ease-in-out;
+  scroll-snap-type: x mandatory;
 }
 
-.mini-weather2 {
-  flex: 0 0 auto; /* Prevents the item from shrinking or growing */
-  width: 200px; /* Set a fixed width for each mini-weather item */
-  margin: 10px; /* Add some space between the mini-weather divs */
-  padding: 10px; /* Add some padding inside the mini-weather divs */
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Add a shadow for better visualization */
-  border-radius: 8px; /* Rounded corners */
-  background-color: #e0e0e000; /* Background color */
-  text-align: center; /* Center the content */
-  scroll-snap-align: start; /* Ensures the item snaps to the start of the container */
-}
-
-/* Width and color of the scrollbar track */
-.forecast-container::-webkit-scrollbar {
-  width: 5px;
-  background-color: #f5f5f500;
-}
-
-/* Handle of the scrollbar */
-.forecast-container::-webkit-scrollbar-thumb {
-  background-color: #3f3e3e85;
-  border-radius: 55px;
-}
-
-/* Handle on hover */
-.forecast-container::-webkit-scrollbar-thumb:hover {
-  background-color: #3b3939;
-}
-
-/* Button at the top and bottom of the scrollbar */
-.forecast-container::-webkit-scrollbar-button {
-  display: none; /* Hide the scrollbar buttons */
-}
-
-/* Corner of the scrollbar */
-.forecast-container::-webkit-scrollbar-corner {
-  background-color: transparent;
-}
-
+.forecast-container::-webkit-scrollbar,
 .forecast-container2::-webkit-scrollbar {
-  width: 5px;
-  background-color: #f5f5f500;
+  height: 6px;
 }
 
-/* Handle of the scrollbar */
+.forecast-container::-webkit-scrollbar-track,
+.forecast-container2::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.forecast-container::-webkit-scrollbar-thumb,
 .forecast-container2::-webkit-scrollbar-thumb {
-  background-color: #3f3e3e85;
-  border-radius: 55px;
+  background-color: rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
 }
 
-/* Handle on hover */
+.forecast-container::-webkit-scrollbar-thumb:hover,
 .forecast-container2::-webkit-scrollbar-thumb:hover {
-  background-color: #3b3939;
+  background-color: rgba(255, 255, 255, 0.4);
 }
 
-/* Button at the top and bottom of the scrollbar */
-.forecast-container2::-webkit-scrollbar-button {
-  display: none; /* Hide the scrollbar buttons */
-}
-
-/* Corner of the scrollbar */
-.forecast-container2::-webkit-scrollbar-corner {
-  background-color: transparent;
-}
-
-.search {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.search input {
-  border-style: solid;
-  outline: 0;
-  padding: 12px 25px;
-  font-size: 18px;
-  background-color: rgba(176, 23, 23, 0);
-  color: rgb(255, 255, 255);
-  border-radius: 30px;
-  border-color: #ffffff;
-  flex: 1;
-  margin-right: 12px;
-}
-
-.search button {
-  border-style: solid;
-  outline: 0;
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  cursor: pointer;
-  border-color: #ffffff;
-  background-color: rgba(255, 0, 0, 0);
-}
-
-.search button img {
-  width: 20px;
-}
-
-.unit-button {
-  padding: 10px 20px;
-  border: 1px solid #ffffff;
-  border-radius: 5px;
-  cursor: pointer;
-  margin: 5px;
-}
-
-.metric-button {
-  background-color: #007bff00;
-  color: #fff;
-}
-
-.imperial-button {
-  background-color: #ffc10700;
-  color: #ffffff;
-}
-
-.weather-info {
-  display: flex;
-  color: rgb(255, 255, 255);
-  flex-direction: column; /* Stack elements vertically */
-  align-items: center; /* Center content horizontally */
-  padding: 1rem; /* Add some padding for spacing */
-  border-radius: 5px; /* Rounded corners for a softer look */
-  background-color: #f0f0f008; /* Light gray background */
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
-  transition: all 0.2s ease-in-out; /* Add a smooth hover effect */
-}
-
-.weather-info:hover {
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.288); /* Increase shadow on hover */
-  transform: scale(1.02); /* Slightly enlarge the card on hover */
-}
-
-.description {
-  margin: 0;
-}
-
-h3 {
-  font-size: 20px;
-  margin-bottom: 0;
-}
-
-.temperature {
-  font-size: 1.8rem;
-  display: flex;
-  justify-content: space-between;
-}
-
-.current {
-  font-size: 57px;
-  font-family: "Trebuchet MS", "Lucida Sans Unicode", "Lucida Grande",
-    "Lucida Sans", Arial, sans-serif;
-}
-
-.high,
-.low {
-  color: #0000009a; /* Lighter color for high and low temperatures */
-}
-
+/* Weather condition icon sizing (used by WeatherIcon.js output). */
 .current-forecast img {
-  width: 130px;
+  width: 110px;
   height: auto;
   object-fit: contain;
 }
 
 .day-forecast img {
-  width: 50px;
-  height: 50px;
+  width: 44px;
+  height: 44px;
   object-fit: contain;
 }
 
 .week-forecast img {
-  width: 100px;
-  height: 50px;
-  object-fit: contain;
-}
-
-.humidity-image {
-  width: 150px;
-  height: 100px;
+  width: 44px;
+  height: 44px;
   object-fit: contain;
 }

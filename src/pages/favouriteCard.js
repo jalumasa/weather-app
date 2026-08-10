@@ -1,103 +1,21 @@
 import React, { useEffect, useState } from "react";
-import "../assets/css/favourites.css"
+import "../assets/css/mainPage.css";
 import WeatherIcon from "../weatherIcon";
 
-function FavouriteCard({ city, onClick }) {
+function FavouriteCard({ city, onClick, onRemove }) {
   const [weatherData, setWeatherData] = useState(null);
 
   useEffect(() => {
-    fetch(`http://localhost:3001/cityweather?name=${city.name}&units=metric`)
+    fetch(`/api/cityweather?name=${city.name}&units=metric`)
       .then((response) => response.json())
-      .then( (data) => {
+      .then((data) => {
         setWeatherData(data);
       })
       .catch((error) => console.error("Error fetching weather data:", error));
   }, [city.name]);
 
-  const getWeatherBackgroundClass = () => {
-    if (!weatherData) return "default-background";
-
-    const { main, description } = weatherData.weather[0];
-    const timeOfDay =
-      weatherData.dt > weatherData.sys.sunrise &&
-      weatherData.dt < weatherData.sys.sunset
-        ? "day"
-        : "night";
-
-    if (main === "Clear") {
-      return timeOfDay === "day"
-        ? "sunny-background"
-        : "clear-night-background";
-    }
-
-    if (main === "Clouds") {
-      switch (description) {
-        case "few clouds":
-          return timeOfDay === "day"
-            ? "few-clouds-background"
-            : "cloudy-night-background";
-        case "scattered clouds":
-          return timeOfDay === "day"
-            ? "scattered-clouds-background"
-            : "cloudy-night-background";
-        case "broken clouds":
-          return timeOfDay === "day"
-            ? "broken-clouds-background"
-            : "cloudy-night-background";
-        case "overcast clouds":
-          return timeOfDay === "day"
-            ? "overcast-clouds-background"
-            : "cloudy-night-background";
-        default:
-          return "cloudy-background";
-      }
-    }
-
-    if (main === "Rain") {
-      switch (description) {
-        case "light rain":
-          return timeOfDay === "day"
-            ? "light-rain-background"
-            : "light-rain-night-background";
-        case "moderate rain":
-          return timeOfDay === "day"
-            ? "moderate-rain-background"
-            : "moderate-rain-night-background";
-        case "heavy intensity rain":
-          return timeOfDay === "day"
-            ? "heavy-rain-background"
-            : "heavy-rain-night-background";
-        case "shower rain":
-          return timeOfDay === "day"
-            ? "shower-rain-background"
-            : "shower-rain-night-background";
-        default:
-          return "rain-background";
-      }
-    }
-
-    if (main === "Drizzle") {
-      return "drizzle-background";
-    }
-
-    if (main === "Mist" || main === "Fog") {
-      return timeOfDay === "day"
-        ? "foggy-background"
-        : "foggy-night-background";
-    }
-
-    return "default-background";
-  };
-
-  if (!weatherData) {
-    return (
-      <div className="favourite-card default-background" onClick={onClick}>
-        <h2>{city.name}</h2>
-      </div>
-    );
-  }
-
   const timeOfDay =
+    weatherData &&
     weatherData.dt > weatherData.sys.sunrise &&
     weatherData.dt < weatherData.sys.sunset
       ? "day"
@@ -105,15 +23,41 @@ function FavouriteCard({ city, onClick }) {
 
   return (
     <div
-      className={`favourite-card ${getWeatherBackgroundClass()}`}
       onClick={onClick}
+      className="glass-card group relative cursor-pointer p-5 text-center transition hover:-translate-y-0.5"
     >
-      <h2>{city.name}</h2>
-      <WeatherIcon
-        weatherMain={weatherData.weather[0].main}
-        weatherDescription={weatherData.weather[0].description}
-        timeOfDay={timeOfDay}
-      />
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove();
+        }}
+        aria-label="Remove from favourites"
+        className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-[9999px] bg-white/10 text-white/60 opacity-0 transition hover:bg-pop-500/80 hover:text-white group-hover:opacity-100"
+      >
+        <i className="fa-solid fa-xmark text-xs"></i>
+      </button>
+
+      <h2 className="text-lg font-semibold">{city.name}</h2>
+
+      {weatherData ? (
+        <>
+          <p className="day-forecast my-2 flex justify-center">
+            <WeatherIcon
+              weatherMain={weatherData.weather[0].main}
+              weatherDescription={weatherData.weather[0].description}
+              timeOfDay={timeOfDay}
+            />
+          </p>
+          <p className="text-3xl font-bold">
+            {Math.round(weatherData.main.temp)}°C
+          </p>
+          <p className="mt-1 text-sm capitalize text-white/60">
+            {weatherData.weather[0].description}
+          </p>
+        </>
+      ) : (
+        <p className="mt-4 text-sm text-white/50">Loading...</p>
+      )}
     </div>
   );
 }

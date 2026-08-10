@@ -23,9 +23,13 @@
     "web-vitals": "^4.0.1"
   },
   "scripts": {
-    "start": "craco start",
-    "build": "craco build",
-    "test": "craco test",
+    "prestart": "npm run build:css",
+    "start": "concurrently \"npm:watch:css\" \"react-scripts start\"",
+    "prebuild": "npm run build:css",
+    "build": "react-scripts build",
+    "build:css": "tailwindcss -i ./src/tailwind-input.css -o ./src/tailwind.generated.css --minify",
+    "watch:css": "tailwindcss -i ./src/tailwind-input.css -o ./src/tailwind.generated.css --watch",
+    "test": "react-scripts test",
     "eject": "react-scripts eject",
     "cypress": "cypress open"
   },
@@ -48,11 +52,9 @@
     ]
   },
   "devDependencies": {
-    "@craco/craco": "^7.1.0",
-    "@tailwindcss/postcss": "^4.3.3",
-    "autoprefixer": "^10.5.4",
+    "@tailwindcss/cli": "^4.3.3",
+    "concurrently": "^10.0.4",
     "cypress": "^13.13.2",
-    "postcss": "^8.5.26",
     "tailwindcss": "^4.3.3",
     "vercel": "^58.9.0"
   }

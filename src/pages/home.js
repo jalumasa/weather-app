@@ -14,15 +14,16 @@ import {
   Legend,
   Tooltip,
 } from "recharts";
+import { Link } from "react-router-dom";
 import "../assets/css/loader.css";
 import "../assets/css/mainPage.css";
-import "../assets/css/comfortPage.css";
 import "../assets/css/graph.css";
-import Login from "./login.js";
-import humidity from "../img/icons/humidity.png";
-import wind from "../img/icons/wind-turbine.png";
-import sunrise from "../img/icons/sunrise.png";
-import sunset from "../img/icons/sunset.png";
+import {
+  HumidityIcon,
+  WindIcon,
+  SunriseIcon,
+  SunsetIcon,
+} from "../icons/StatIcons.js";
 
 // Used when geolocation is denied or unavailable, so the app still has
 // something to show instead of getting stuck on "Failed to fetch weather data".
@@ -51,28 +52,284 @@ function Home({ weatherMain }) {
   });
   const [weeklyData, setWeeklyData] = useState([]);
   const [dataKey, setDataKey] = useState("Temperature");
-  const [bgClass, setBgClass] = useState("");
   const [units, setUnits] = useState("metric");
   const [unitName, setUnitName] = useState({ temp: "C", speed: "Km/h" });
   const { currentUser } = useAuth();
   const [clickedFavourites, setClickedFavourites] = useState(false);
-  const [showTime, setShowTime] = useState(false);
   const [times, setTimes] = useState([]);
   const reactRouterLocation = useReactRouterLocation();
 
-  const fetchWeatherDataByCity = useCallback(
-    async (city) => {
+  //Fetch + process weather/forecast/timezone for a given city name, then
+  //set all the derived state. Shared by the search box and by anything that
+  //navigates to /home?city=<name> (favourites, direct links).
+  const fetchAndSetWeatherByCity = useCallback(
+    async (cityName) => {
+      if (!cityName) return;
+      setLoading(true);
+      const apiUrl = `/cityweather?name=${encodeURIComponent(
+        cityName
+      )}&units=${units}`;
+      const apiForecast = `/cityforecast?name=${encodeURIComponent(
+        cityName
+      )}&units=${units}`;
+
       try {
-        setLoading(true);
-        const apiUrl = `/cityweather?name=${city}&units=${units}`;
-        await axios.get(apiUrl);
+        const [currentWeatherResponse, forecastWeatherResponse] =
+          await Promise.all([axios.get(apiUrl), axios.get(apiForecast)]);
+
+        const currentResponse = currentWeatherResponse.data;
+        const weatherMain = currentResponse.weather[0].main;
+        const weatherDescription = currentResponse.weather[0].main.description;
+
+        const timeDay = currentDayTime();
+        const getDayOrNight = (timeDay) => {
+          const time = new Date(timeDay);
+          const hours = time.getHours();
+          return hours >= 6 && hours < 18 ? "day" : "night";
+        };
+        const timeOfDay = getDayOrNight(timeDay);
+
+        const sunrise = new Date(
+          currentResponse.sys.sunrise * 1000
+        ).toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        });
+
+        const sunset = new Date(
+          currentResponse.sys.sunset * 1000
+        ).toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        });
+
+        const description =
+          currentResponse.weather[0].description.charAt(0).toUpperCase() +
+          currentResponse.weather[0].description.slice(1).toLowerCase();
+
+        setData({
+          celcius: currentResponse.main.temp,
+          name: currentResponse.name,
+          humidity: currentResponse.main.humidity,
+          speed: currentResponse.wind.speed,
+          image: (
+            <WeatherIcon
+              weatherMain={weatherMain}
+              weatherDescription={weatherDescription}
+              timeOfDay={timeOfDay}
+            />
+          ),
+          description: description,
+          country: currentResponse.sys.country,
+          tempMax: currentResponse.main.temp_max,
+          tempMin: currentResponse.main.temp_min,
+          feelsLike: currentResponse.main.feels_like,
+          sunrise: sunrise,
+          sunset: sunset,
+          latitude: currentResponse.coord.lat,
+          longitude: currentResponse.coord.lon,
+        });
+
+        const latitude = currentResponse.coord.lat;
+        const longitude = currentResponse.coord.lon;
+
+        const tzResponse = await axios.get(
+          `/timeZone?lat=${latitude}&lon=${longitude}`
+        );
+        const timeRefined = new Date(
+          tzResponse.data.formatted
+        ).toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        });
+        setTimes({ time: timeRefined });
+
+        const word =
+          cityName.charAt(0).toUpperCase() + cityName.slice(1).toLowerCase();
+        toast.success(word);
+
+        const today = new Date();
+        const todayDate = new Date().toISOString().split("T")[0];
+
+        const tomorrow = new Date();
+        tomorrow.setDate(today.getDate() + 1);
+        const tomorrowDate = tomorrow.toISOString().split("T")[0];
+
+        const forecastData = forecastWeatherResponse.data.list.slice(0, 40);
+
+        // Process forecast data for the day
+        const processedForecastData = forecastData
+          .map((forecast) => {
+            const getDayOrNight = (dateString) => {
+              const time = new Date(dateString);
+              const hours = time.getHours();
+              return hours >= 6 && hours < 18 ? "day" : "night";
+            };
+            const dateString = forecast.dt_txt;
+            const timeOfDay = getDayOrNight(dateString);
+            const forecastDate = new Date(dateString)
+              .toISOString()
+              .split("T")[0];
+            const convertToDate = new Date(dateString);
+            const options = {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+              weekday: "short",
+            };
+
+            const optionsTime = {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: true,
+            };
+            let formattedDateString = new Intl.DateTimeFormat(
+              "en-GB",
+              options
+            ).format(convertToDate);
+            const formattedTimeString = new Intl.DateTimeFormat(
+              "en-GB",
+              optionsTime
+            ).format(convertToDate);
+
+            const description =
+              forecast.weather[0].description.charAt(0).toUpperCase() +
+              forecast.weather[0].description.slice(1).toLowerCase();
+
+            const weatherMain = forecast.weather[0].main;
+            const weatherDescription = forecast.weather[0].main.description;
+
+            if (forecastDate === todayDate) {
+              return {
+                celcius: forecast.main.temp,
+                name: forecastWeatherResponse.data.city.name,
+                humidity: forecast.main.humidity,
+                speed: forecast.wind.speed,
+                image: (
+                  <WeatherIcon
+                    weatherMain={weatherMain}
+                    weatherDescription={weatherDescription}
+                    timeOfDay={timeOfDay}
+                  />
+                ),
+                description: description,
+                country: forecastWeatherResponse.data.city.country,
+                date: formattedDateString,
+                time: formattedTimeString,
+              };
+            } else {
+              return null;
+            }
+          })
+          .filter(Boolean);
+
+        // Process forecast data for the week
+        const groupedData = forecastData.reduce((acc, forecast) => {
+          if (forecast.dt_txt) {
+            const dateString = forecast.dt_txt.split(" ")[0];
+            if (!acc[dateString]) {
+              acc[dateString] = [];
+            }
+            acc[dateString].push(forecast);
+          }
+          return acc;
+        }, {});
+
+        const processedForecastData2 = Object.keys(groupedData).map(
+          (date) => {
+            const dateString = "2024-06-04 12:00:00";
+            const getDayOrNight = (dateString) => {
+              const time = new Date(dateString);
+              const hours = time.getHours();
+              return hours >= 6 && hours < 18 ? "day" : "night";
+            };
+            const timeOfDay = getDayOrNight(dateString);
+            const dayForecasts = groupedData[date];
+            const total = dayForecasts.reduce(
+              (acc, forecast) => {
+                acc.temp += forecast.main.temp;
+                acc.wind += forecast.wind.speed;
+                acc.humidity += forecast.main.humidity;
+                return acc;
+              },
+              { temp: 0, wind: 0, humidity: 0 }
+            );
+
+            const averageTemp = total.temp / dayForecasts.length;
+            const averageHumidity = total.humidity / dayForecasts.length;
+            const averageWind = total.wind / dayForecasts.length;
+
+            let formattedDateString = "";
+            if (date === todayDate) {
+              formattedDateString = "Today";
+            } else if (date === tomorrowDate) {
+              formattedDateString = "Tomorrow";
+            } else {
+              formattedDateString = new Date(date).toLocaleDateString(
+                "en-US",
+                {
+                  month: "2-digit",
+                  day: "2-digit",
+                }
+              );
+            }
+
+            const description =
+              dayForecasts[0].weather[0].description.charAt(0).toUpperCase() +
+              dayForecasts[0].weather[0].description.slice(1).toLowerCase();
+
+            const weatherMain = dayForecasts[0].weather[0].main;
+            const weatherDescription = dayForecasts[0].weather[0].description;
+
+            return {
+              day: formattedDateString,
+              image: (
+                <WeatherIcon
+                  weatherMain={weatherMain}
+                  weatherDescription={weatherDescription}
+                  timeOfDay={timeOfDay}
+                />
+              ),
+              averageTemp: averageTemp.toFixed(1),
+              averageWind: averageWind.toFixed(1),
+              averageHumidity: averageHumidity.toFixed(1),
+              description: description,
+            };
+          }
+        );
+
+        setTodaysData(processedForecastData);
+        setData2(processedForecastData2);
         setLoading(false);
+        setError("");
       } catch (error) {
-        console.error("Error fetching weather data:", error);
         setLoading(false);
+        if (error.response && error.response.status === 404) {
+          setError("City not found. Please try again.");
+        } else {
+          setError("Failed to fetch weather data.");
+        }
+        console.error("Error fetching weather data:", error);
       }
     },
     [units]
+  );
+
+  //Search box submit: fetch weather for whatever's in the city name field.
+  const handleClick = useCallback(() => {
+    fetchAndSetWeatherByCity(name);
+  }, [name, fetchAndSetWeatherByCity]);
+
+  //Fetch weather for an arbitrary city name (used by ?city= URL navigation,
+  //e.g. clicking a favourite from the Favourites page).
+  const fetchWeatherDataByCity = useCallback(
+    (city) => {
+      fetchAndSetWeatherByCity(city);
+    },
+    [fetchAndSetWeatherByCity]
   );
 
   //Data from the API being processed
@@ -300,265 +557,6 @@ function Home({ weatherMain }) {
     [units]
   );
 
-  //Adjusting the UI according to the user's search input
-  const handleClick = useCallback(async () => {
-    if (name !== "") {
-      setLoading(true);
-      const apiUrl = `/cityweather?name=${encodeURIComponent(
-        name
-      )}&units=${units}`;
-      const apiForecast = `/cityforecast?name=${encodeURIComponent(
-        name
-      )}&units=${units}`;
-
-      try {
-        const [currentWeatherResponse, forecastWeatherResponse] =
-          await Promise.all([axios.get(apiUrl), axios.get(apiForecast)]);
-
-        const currentResponse = currentWeatherResponse.data;
-        const weatherMain = currentResponse.weather[0].main;
-        const weatherDescription = currentResponse.weather[0].main.description;
-
-        const timeDay = currentDayTime();
-        const getDayOrNight = (timeDay) => {
-          const time = new Date(timeDay);
-          const hours = time.getHours();
-          return hours >= 6 && hours < 18 ? "day" : "night";
-        };
-        const timeOfDay = getDayOrNight(timeDay);
-
-        const sunrise = new Date(
-          currentResponse.sys.sunrise * 1000
-        ).toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        });
-
-        const sunset = new Date(
-          currentResponse.sys.sunset * 1000
-        ).toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        });
-
-        const description =
-          currentResponse.weather[0].description.charAt(0).toUpperCase() +
-          currentResponse.weather[0].description.slice(1).toLowerCase();
-
-        setData({
-          celcius: currentResponse.main.temp,
-          name: currentResponse.name,
-          humidity: currentResponse.main.humidity,
-          speed: currentResponse.wind.speed,
-          image: (
-            <WeatherIcon
-              weatherMain={weatherMain}
-              weatherDescription={weatherDescription}
-              timeOfDay={timeOfDay}
-            />
-          ),
-          description: description,
-          country: currentResponse.sys.country,
-          tempMax: currentResponse.main.temp_max,
-          tempMin: currentResponse.main.temp_min,
-          feelsLike: currentResponse.main.feels_like,
-          sunrise: sunrise,
-          sunset: sunset,
-          latitude: currentResponse.coord.lat,
-          longitude: currentResponse.coord.lon,
-        });
-
-        const latitude = currentResponse.coord.lat;
-        const longitude = currentResponse.coord.lon;
-
-        const tzResponse = await axios.get(
-          `/timeZone?lat=${latitude}&lon=${longitude}`
-        );
-        setShowTime(true);
-        console.log(showTime);
-        console.log("Timezone data:", tzResponse.data);
-        const timeRefined = new Date(
-          tzResponse.data.formatted
-        ).toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        });
-        setTimes({ time: timeRefined });
-
-        const word = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
-        if (!loading) {
-          toast.success(word);
-        }
-
-        const today = new Date();
-        const todayDate = new Date().toISOString().split("T")[0];
-
-        const tomorrow = new Date();
-        tomorrow.setDate(today.getDate() + 1);
-        const tomorrowDate = tomorrow.toISOString().split("T")[0];
-
-        const forecastData = forecastWeatherResponse.data.list.slice(0, 40);
-
-        // Process forecast data for the day
-        const processedForecastData = forecastData
-          .map((forecast) => {
-            const getDayOrNight = (dateString) => {
-              const time = new Date(dateString);
-              const hours = time.getHours();
-              return hours >= 6 && hours < 18 ? "day" : "night";
-            };
-            const dateString = forecast.dt_txt;
-            const timeOfDay = getDayOrNight(dateString);
-            const forecastDate = new Date(dateString)
-              .toISOString()
-              .split("T")[0];
-            const convertToDate = new Date(dateString);
-            const options = {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-              weekday: "short",
-            };
-
-            const optionsTime = {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: true,
-            };
-            let formattedDateString = new Intl.DateTimeFormat(
-              "en-GB",
-              options
-            ).format(convertToDate);
-            const formattedTimeString = new Intl.DateTimeFormat(
-              "en-GB",
-              optionsTime
-            ).format(convertToDate);
-
-            const description =
-              forecast.weather[0].description.charAt(0).toUpperCase() +
-              forecast.weather[0].description.slice(1).toLowerCase();
-
-            const weatherMain = forecast.weather[0].main;
-            const weatherDescription = forecast.weather[0].main.description;
-
-            if (forecastDate === todayDate) {
-              return {
-                celcius: forecast.main.temp,
-                name: forecastWeatherResponse.data.city.name,
-                humidity: forecast.main.humidity,
-                speed: forecast.wind.speed,
-                image: (
-                  <WeatherIcon
-                    weatherMain={weatherMain}
-                    weatherDescription={weatherDescription}
-                    timeOfDay={timeOfDay}
-                  />
-                ),
-                description: description,
-                country: forecastWeatherResponse.data.city.country,
-                date: formattedDateString,
-                time: formattedTimeString,
-              };
-            } else {
-              return null;
-            }
-          })
-          .filter(Boolean);
-
-        // Process forecast data for the week
-        const groupedData = forecastData.reduce((acc, forecast) => {
-          if (forecast.dt_txt) {
-            const dateString = forecast.dt_txt.split(" ")[0];
-            if (!acc[dateString]) {
-              acc[dateString] = [];
-            }
-            acc[dateString].push(forecast);
-          }
-          return acc;
-        }, {});
-
-        const processedForecastData2 = Object.keys(groupedData).map(
-          (date) => {
-            const dateString = "2024-06-04 12:00:00";
-            const getDayOrNight = (dateString) => {
-              const time = new Date(dateString);
-              const hours = time.getHours();
-              return hours >= 6 && hours < 18 ? "day" : "night";
-            };
-            const timeOfDay = getDayOrNight(dateString);
-            const dayForecasts = groupedData[date];
-            const total = dayForecasts.reduce(
-              (acc, forecast) => {
-                acc.temp += forecast.main.temp;
-                acc.wind += forecast.wind.speed;
-                acc.humidity += forecast.main.humidity;
-                return acc;
-              },
-              { temp: 0, wind: 0, humidity: 0 }
-            );
-
-            const averageTemp = total.temp / dayForecasts.length;
-            const averageHumidity = total.humidity / dayForecasts.length;
-            const averageWind = total.wind / dayForecasts.length;
-
-            let formattedDateString = "";
-            if (date === todayDate) {
-              formattedDateString = "Today";
-            } else if (date === tomorrowDate) {
-              formattedDateString = "Tomorrow";
-            } else {
-              formattedDateString = new Date(date).toLocaleDateString(
-                "en-US",
-                {
-                  month: "2-digit",
-                  day: "2-digit",
-                }
-              );
-            }
-
-            const description =
-              dayForecasts[0].weather[0].description.charAt(0).toUpperCase() +
-              dayForecasts[0].weather[0].description.slice(1).toLowerCase();
-
-            const weatherMain = dayForecasts[0].weather[0].main;
-            const weatherDescription = dayForecasts[0].weather[0].description;
-
-            return {
-              day: formattedDateString,
-              image: (
-                <WeatherIcon
-                  weatherMain={weatherMain}
-                  weatherDescription={weatherDescription}
-                  timeOfDay={timeOfDay}
-                />
-              ),
-              averageTemp: averageTemp.toFixed(1),
-              averageWind: averageWind.toFixed(1),
-              averageHumidity: averageHumidity.toFixed(1),
-              description: description,
-            };
-          }
-        );
-
-        setTodaysData(processedForecastData);
-        setData2(processedForecastData2);
-        setLoading(false);
-        setError("");
-      } catch (error) {
-        setLoading(false);
-        if (error.response && error.response.status === 404) {
-          setError("City not found. Please try again.");
-        } else {
-          setError("Failed to fetch weather data.");
-        }
-        console.error("Error fetching weather data:", error);
-      }
-    }
-  }, [name, units, loading, showTime]);
-
   //the Line Graph for visualization
   const weeklyGraph = useCallback(
     (action) => {
@@ -684,15 +682,6 @@ function Home({ weatherMain }) {
   });
 
   useEffect(() => {
-    const currentHour = new Date().getHours();
-    if (currentHour >= 6 && currentHour < 18) {
-      setBgClass("morning-bg");
-    } else {
-      setBgClass("night-bg");
-    }
-  }, []);
-
-  useEffect(() => {
     if (data2.length > 0) {
       weeklyGraph("temp");
     }
@@ -714,13 +703,13 @@ function Home({ weatherMain }) {
   const getColor = (key) => {
     switch (key) {
       case "Temperature":
-        return "red";
+        return "#ec4899"; // pop-500
       case "Humidity":
-        return "blue";
+        return "#0ea5e9"; // sky-500
       case "Wind":
-        return "green";
+        return "#a5a6f6"; // dusk-300
       default:
-        return "black"; // Default color
+        return "#ffffff";
     }
   };
 
@@ -760,6 +749,10 @@ function Home({ weatherMain }) {
 
   //Toggling the icon for favourites
   const toggleFavourite = (name) => {
+    if (!currentUser) {
+      toast.error("Log in to save favourite cities");
+      return;
+    }
     const existingFavourite = favourites.find((fav) => fav.name === name);
     if (existingFavourite) {
       removeFromFavourites(existingFavourite._id);
@@ -768,302 +761,284 @@ function Home({ weatherMain }) {
     }
   };
 
+  const pillButtonClasses = (active) =>
+    `rounded-[9999px] px-4 py-1.5 text-sm font-medium transition ${
+      active
+        ? "bg-white/20 text-white"
+        : "text-white/70 hover:bg-white/10 hover:text-white"
+    }`;
+
   return (
-    <div data-cy="main-div">
-      {currentUser ? (
-        <div id="left">
-          <div className="details">
-            <div className="col-humidity">
-              <h3>Comfort Level</h3>
-              <div className="humidity">
-                <img src={humidity} alt="Humidity" className="icon-image" />
-                <p className="humidity-value">{data.humidity}%</p>
-                <p>Humidity</p>
-                <p>
-                  Feels like: {Math.round(data.feelsLike)}°{unitName.temp}
-                </p>
-              </div>
-            </div>
-
-            <div className="col-wind">
-              <h3>Wind</h3>
-              <div className="wind">
-                <img src={wind} alt="Wind Speed" className="icon-image" />
-                <p className="wind-speed">
-                  {Math.round(data.speed)} {unitName.speed}
-                </p>
-                <p>Wind Speed</p>
-              </div>
-            </div>
-
-            <div className="col-sunrise-sunset">
-              <h3>Sunrise & Sunset</h3>
-              <div className="sunrise-sunset">
-                <img src={sunset} alt="Sunrise" className="icon-image" />
-                <p>Sunrise: {data.sunrise}</p>
-                <img src={sunrise} alt="Sunset" className="icon-image" />
-                <p>Sunset: {data.sunset}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div>
-          <Login />
+    <div data-cy="main-div" className="relative">
+      {loading && (
+        <div className="loader">
+          <div className="loader__circle"></div>
+          <div className="loader__circle"></div>
+          <div className="loader__circle"></div>
+          <div className="loader__circle"></div>
         </div>
       )}
-      <div id="middle">
-        <div className="container2">
-          {currentUser ? (
-            <div id="middle">
-              <div className="weather">
-                <div
-                  className={`container ${bgClass}`}
-                  style={{ borderRadius: "35px", padding: "20px" }}
-                >
-                  {currentUser ? <p>Welcome, {currentUser.email}</p> : null}
-                  <p>{formattedTime}</p>
-                  <button onClick={metric} class="unit-button metric-button">
-                    Metric
-                  </button>
-                  <button
-                    onClick={imperial}
-                    class="unit-button imperial-button"
-                  >
-                    Imperial
-                  </button>
-                  <br />
-                  <div className="search">
-                    <input
-                      type="text"
-                      placeholder="Enter City name"
-                      onChange={(e) => setName(e.target.value)}
-                    />
-                    <button onClick={handleClick}>
-                      <i className="material-icons">search</i>
-                    </button>
-                  </div>
-                  <div className="error">
-                    <p>{error}</p>
-                  </div>
-                  {!error && (
-                    <div className="winfo">
-                      <div className="weather-info">
-                        <div className="description">
-                          <h3>{data.description}</h3>
-                          <br />
-                          <p className="current-forecast">{data.image}</p>
-                        </div>
-                        <span>
-                          <h1>
-                            <span className="current">
-                              {Math.round(data.celcius)}°{unitName.temp}
-                            </span>
-                          </h1>
-                          <h4>
-                            Feels like {Math.round(data.feelsLike)}°
-                            {unitName.temp}
-                          </h4>
-                        </span>
-                        <div className="temperature">
-                          <p>
-                            <span className="high">
-                              High: {Math.round(data.tempMax)}°{unitName.temp}/
-                            </span>
-                            {""}
-                            <span className="low">
-                              Low: {Math.round(data.tempMin)}°{unitName.temp}
-                            </span>
-                          </p>
-                        </div>
-                      </div>
-                      <h4>
-                        <span
-                          style={{ display: "inline-block", fontSize: "45px" }}
-                        >
-                          {data.name}, {data.country}
-                        </span>
-                        <button
-                          className="favourites"
-                          onClick={() => toggleFavourite(data.name)}
-                        >
-                          {favourites.some((fav) => fav.name === data.name) ? (
-                            <i
-                              className="fa-solid fa-heart"
-                              style={{ color: "red", fontSize: "50px" }}
-                            ></i>
-                          ) : (
-                            <i
-                              className="fa-regular fa-heart"
-                              style={{ color: "white", fontSize: "50px" }}
-                            ></i>
-                          )}
-                        </button>
-                        {times ? <p>{times.time}</p> : null}
-                      </h4>
-                      <hr />
-                      <p>
-                        <u>All day, today</u>
-                      </p>
-                      {/* Forecast for the day */}
-                      <div className="forecast-container">
-                        {todaysData.map((forecast, index) => {
-                          return (
-                            <div className="mini-weather">
-                              <div className="forecasted">
-                                <div key={index}>
-                                  <p>{forecast.time}</p>
-                                  <p className="day-forecast">
-                                    {forecast.image}
-                                  </p>
-                                  <p>
-                                    {Math.round(forecast.celcius)}°
-                                    {unitName.temp}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <hr />
-                      {/* Forecast for the week */}
-                      <div className="forecast-container2">
-                        {data2.map((forecast, index) => (
-                          <div className="mini-weather2">
-                            <div className="forecasted2">
-                              <div key={index}>
-                                <p>{forecast.day}</p>
-                                <p className="week-forecast">
-                                  {forecast.image}
-                                </p>
-                                <p>
-                                  {Math.round(forecast.averageTemp)}°
-                                  {unitName.temp}
-                                </p>
-                                <p>{forecast.description}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <hr />
-                      {/* Graph goes here */}
-                      <div className="graph-container">
-                        <div className="button-container">
-                          <button
-                            className="graph-button-temp"
-                            onClick={() => weeklyGraph("temp")}
-                          >
-                            Temp
-                          </button>
-                          <button
-                            className="graph-button-humidity"
-                            onClick={() => weeklyGraph("humidity")}
-                          >
-                            Humidity
-                          </button>
-                          <button
-                            className="graph-button-wind"
-                            onClick={() => weeklyGraph("wind")}
-                          >
-                            Wind
-                          </button>
-                        </div>
-                        <h2 className="graph-title">{dataKeyName(dataKey)}</h2>
-                        <div className="chart-container">
-                          <LineChart
-                            width={600}
-                            height={300}
-                            data={weeklyData}
-                            margin={{
-                              top: 20,
-                              right: 20,
-                              left: 20,
-                              bottom: 20,
-                            }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis
-                              dataKey="name"
-                              label={{
-                                value: "",
-                                position: "insideBottomRight",
-                                offset: -5,
-                              }}
-                            />
-                            <YAxis
-                              label={{
-                                value: dataKeyName(dataKey),
-                                angle: -90,
-                                position: "insideLeft",
-                              }}
-                            />
-                            <Tooltip
-                              contentStyle={{
-                                backgroundColor: "#f5f5f5",
-                                borderRadius: "10px",
-                              }}
-                            />
-                            <Legend />
-                            <Line
-                              type="monotone"
-                              dataKey={dataKey}
-                              stroke={getColor(dataKey)}
-                              strokeWidth={2.5}
-                              activeDot={{ r: 8 }}
-                            />
-                          </LineChart>
-                        </div>
-                      </div>
-                      <hr />
-                    </div>
-                  )}
-                </div>
 
-                {loading && (
-                  <div className="loader">
-                    <div className="loader__circle"></div>
-                    <div className="loader__circle"></div>
-                    <div className="loader__circle"></div>
-                    <div className="loader__circle"></div>
-                  </div>
-                )}
-              </div>
-            </div>
+      <div className="mx-auto max-w-3xl px-4 pb-16 pt-6 text-white">
+        {/* Status row */}
+        <div className="mb-4 flex items-center justify-between text-sm text-white/70">
+          {currentUser ? (
+            <p>Welcome, {currentUser.email}</p>
           ) : (
-            <div>
-              <Login />
+            <p>
+              <Link to="/login" className="text-sky-300 hover:text-sky-200">
+                Log in
+              </Link>{" "}
+              to save favourite cities
+            </p>
+          )}
+          <p>{formattedTime}</p>
+        </div>
+
+        {/* Search + units + favourite chips */}
+        <div className="glass-card p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="search flex flex-1 items-center gap-2">
+              <input
+                type="text"
+                placeholder="Enter City name"
+                onChange={(e) => setName(e.target.value)}
+                className="w-full flex-1 rounded-[9999px] border border-white/25 bg-white/10 px-5 py-2.5 text-white placeholder-white/50 outline-none transition focus:border-sky-300 focus:bg-white/15 focus:ring-2 focus:ring-sky-300/40"
+              />
+              <button
+                onClick={handleClick}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[9999px] bg-gradient-to-r from-sky-500 to-pop-500 transition hover:opacity-90"
+              >
+                <i className="material-icons text-xl">search</i>
+              </button>
+            </div>
+            <div className="flex justify-center gap-2 sm:justify-start">
+              <button onClick={metric} className={pillButtonClasses(units === "metric")}>
+                Metric
+              </button>
+              <button onClick={imperial} className={pillButtonClasses(units === "imperial")}>
+                Imperial
+              </button>
+            </div>
+          </div>
+
+          {currentUser && favourites.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-3">
+              {favourites.map((favourite, index) => (
+                <button
+                  key={index}
+                  onClick={() => {
+                    setName(favourite.name);
+                    setClickedFavourites(true);
+                  }}
+                  className="rounded-[9999px] bg-white/10 px-3 py-1 text-xs text-white/80 transition hover:bg-white/20 hover:text-white"
+                >
+                  {favourite.name}
+                </button>
+              ))}
             </div>
           )}
         </div>
-      </div>
-      {currentUser ? (
-        <div id="right">
-          <h2 className="listed-header">My favourite Cities</h2>
-          {favourites.length
-            ? favourites.map((favourite, index) => (
-                <div key={index}>
-                  <ul>
-                    <li
-                      className="listed"
-                      onClick={() => {
-                        setName(favourite.name);
-                        setClickedFavourites(true);
-                      }}
-                    >
-                      {favourite.name}
-                    </li>
-                  </ul>
+
+        {error && (
+          <p className="mt-4 rounded-lg border border-pop-500/40 bg-pop-500/20 px-3 py-2 text-center text-sm text-pop-400">
+            {error}
+          </p>
+        )}
+
+        {!error && (
+          <>
+            {/* Hero */}
+            <div className="glass-card mt-6 p-8 text-center">
+              <div className="flex items-center justify-center gap-3">
+                <h1 className="text-3xl font-bold">
+                  {data.name}, {data.country}
+                </h1>
+                <button
+                  className="favourites transition hover:scale-110"
+                  onClick={() => toggleFavourite(data.name)}
+                >
+                  {favourites.some((fav) => fav.name === data.name) ? (
+                    <i className="fa-solid fa-heart text-2xl text-pop-500"></i>
+                  ) : (
+                    <i className="fa-regular fa-heart text-2xl text-white"></i>
+                  )}
+                </button>
+              </div>
+              {times ? <p className="text-sm text-white/50">{times.time}</p> : null}
+
+              <p className="current-forecast mx-auto my-2 flex justify-center">
+                {data.image}
+              </p>
+              <p className="text-7xl font-bold">
+                {Math.round(data.celcius)}°{unitName.temp}
+              </p>
+              <p className="mt-2 text-lg text-white/80">{data.description}</p>
+              <p className="mt-1 text-white/60">
+                Feels like {Math.round(data.feelsLike)}°{unitName.temp}
+              </p>
+              <p className="mt-1 text-sm text-white/50">
+                High: {Math.round(data.tempMax)}°{unitName.temp} / Low:{" "}
+                {Math.round(data.tempMin)}°{unitName.temp}
+              </p>
+            </div>
+
+            {/* Hourly forecast */}
+            <div className="mt-6">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-white/60">
+                Today
+              </h2>
+              <div className="forecast-container flex gap-3 overflow-x-auto pb-2">
+                {todaysData.map((forecast, index) => (
+                  <div
+                    key={index}
+                    className="glass-card flex shrink-0 flex-col items-center px-4 py-3 text-center"
+                    style={{ scrollSnapAlign: "start" }}
+                  >
+                    <p className="text-sm text-white/60">{forecast.time}</p>
+                    <p className="day-forecast my-1 flex justify-center">
+                      {forecast.image}
+                    </p>
+                    <p className="font-semibold">
+                      {Math.round(forecast.celcius)}°{unitName.temp}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Weekly forecast */}
+            <div className="mt-6">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-white/60">
+                7-Day Forecast
+              </h2>
+              <div className="forecast-container2 flex gap-3 overflow-x-auto pb-2">
+                {data2.map((forecast, index) => (
+                  <div
+                    key={index}
+                    className="glass-card flex w-28 shrink-0 flex-col items-center px-4 py-3 text-center"
+                    style={{ scrollSnapAlign: "start" }}
+                  >
+                    <p className="text-sm text-white/60">{forecast.day}</p>
+                    <p className="week-forecast my-1 flex justify-center">
+                      {forecast.image}
+                    </p>
+                    <p className="font-semibold">
+                      {Math.round(forecast.averageTemp)}°{unitName.temp}
+                    </p>
+                    <p className="mt-1 text-xs text-white/50">
+                      {forecast.description}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Detail tiles */}
+            <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="glass-card p-5 text-center transition hover:-translate-y-0.5">
+                <h3 className="text-xs font-medium uppercase tracking-wide text-white/60">
+                  Humidity
+                </h3>
+                <HumidityIcon className="mx-auto my-3 h-14 w-14" />
+                <p className="text-2xl font-bold">{data.humidity}%</p>
+              </div>
+
+              <div className="glass-card p-5 text-center transition hover:-translate-y-0.5">
+                <h3 className="text-xs font-medium uppercase tracking-wide text-white/60">
+                  Wind
+                </h3>
+                <WindIcon className="mx-auto my-3 h-14 w-14" />
+                <p className="text-2xl font-bold">
+                  {Math.round(data.speed)} {unitName.speed}
+                </p>
+              </div>
+
+              <div className="glass-card p-5 text-center transition hover:-translate-y-0.5">
+                <h3 className="text-xs font-medium uppercase tracking-wide text-white/60">
+                  Sunrise
+                </h3>
+                <SunriseIcon className="mx-auto my-3 h-14 w-14" />
+                <p className="text-lg font-bold">{data.sunrise}</p>
+              </div>
+
+              <div className="glass-card p-5 text-center transition hover:-translate-y-0.5">
+                <h3 className="text-xs font-medium uppercase tracking-wide text-white/60">
+                  Sunset
+                </h3>
+                <SunsetIcon className="mx-auto my-3 h-14 w-14" />
+                <p className="text-lg font-bold">{data.sunset}</p>
+              </div>
+            </div>
+
+            {/* Trend graph */}
+            <div className="glass-card mt-6 p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold">{dataKeyName(dataKey)}</h2>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => weeklyGraph("temp")}
+                    className={pillButtonClasses(dataKey === "Temperature")}
+                  >
+                    Temp
+                  </button>
+                  <button
+                    onClick={() => weeklyGraph("humidity")}
+                    className={pillButtonClasses(dataKey === "Humidity")}
+                  >
+                    Humidity
+                  </button>
+                  <button
+                    onClick={() => weeklyGraph("wind")}
+                    className={pillButtonClasses(dataKey === "Wind")}
+                  >
+                    Wind
+                  </button>
                 </div>
-              ))
-            : null}
-        </div>
-      ) : (
-        <div>
-          <Login />
-        </div>
-      )}
+              </div>
+              <div className="mt-4 flex justify-center overflow-x-auto">
+                <LineChart
+                  width={600}
+                  height={300}
+                  data={weeklyData}
+                  margin={{
+                    top: 20,
+                    right: 20,
+                    left: 20,
+                    bottom: 20,
+                  }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                  <XAxis dataKey="name" />
+                  <YAxis
+                    label={{
+                      value: dataKeyName(dataKey),
+                      angle: -90,
+                      position: "insideLeft",
+                    }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "rgba(30, 27, 75, 0.9)",
+                      border: "1px solid rgba(255,255,255,0.15)",
+                      borderRadius: "10px",
+                      color: "white",
+                    }}
+                  />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey={dataKey}
+                    stroke={getColor(dataKey)}
+                    strokeWidth={2.5}
+                    activeDot={{ r: 8 }}
+                  />
+                </LineChart>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

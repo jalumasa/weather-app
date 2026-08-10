@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+/*
+  Design tokens for the RainCoat redesign: a bold/colorful palette meant to
+  sit behind glassmorphic (frosted, translucent) cards. Each color becomes a
+  Tailwind utility automatically, e.g. --color-sky-500 -> bg-sky-500/text-sky-500.
+  Values will get refined as real screens are built over the next few days;
+  this is the shared starting point so every page pulls from the same set.
+
+  This file is compiled by the Tailwind CLI (see package.json's build:css /
+  watch:css scripts) into src/tailwind.generated.css, which is what actually
+  gets imported by the app. Do not edit the generated file directly.
+*/
+@theme {
+  /* Daytime sky: cyan -> blue, used for the default gradient background */
+  --color-sky-50: #eff9ff;
+  --color-sky-100: #d9f0ff;
+  --color-sky-300: #7dd3fc;
+  --color-sky-500: #0ea5e9;
+  --color-sky-700: #0369a1;
+  --color-sky-900: #0c4a6e;
+
+  /* Night sky: indigo -> violet, used after dusk */
+  --color-dusk-100: #e0e0fd;
+  --color-dusk-300: #a5a6f6;
+  --color-dusk-500: #6366f1;
+  --color-dusk-700: #4338ca;
+  --color-dusk-900: #1e1b4b;
+
+  /* Sun/warmth accent: amber -> coral, for highlights and CTAs */
+  --color-sun-300: #fde68a;
+  --color-sun-500: #f59e0b;
+  --color-sun-600: #ea580c;
+
+  /* Energetic accent pop: pink/magenta, used sparingly for emphasis */
+  --color-pop-400: #f472b6;
+  --color-pop-500: #ec4899;
+  --color-pop-600: #db2777;
+}
+
+@layer base {
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+      "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
+      "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  code {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+      monospace;
+  }
+}
+
+@layer components {
+  /* Frosted glass panel: the core building block of the redesign. */
+  .glass-card {
+    @apply rounded-3xl border border-white/25 bg-white/10 shadow-xl shadow-black/10 backdrop-blur-xl;
+  }
+
+  .bg-gradient-day {
+    @apply bg-gradient-to-br from-sky-300 via-sky-500 to-dusk-500;
+  }
+
+  .bg-gradient-night {
+    @apply bg-gradient-to-br from-dusk-700 via-dusk-900 to-black;
+  }
+}

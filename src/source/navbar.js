@@ -4,7 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import "boxicons/css/boxicons.min.css";
 
 const navLinkClasses = ({ isActive }) =>
-  `rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+  `rounded-[9999px] px-4 py-1.5 text-sm font-medium transition-colors ${
     isActive
       ? "bg-white/20 text-white"
       : "text-white/70 hover:bg-white/10 hover:text-white"
@@ -30,27 +30,25 @@ export default function Navbar() {
         </span>
       </Link>
 
-      {currentUser ? (
-        <div className="flex items-center gap-1">
-          <NavLink to="/" end className={navLinkClasses}>
-            Home
-          </NavLink>
-          <NavLink to="/favourites" className={navLinkClasses}>
-            Favourite Cities
-          </NavLink>
-        </div>
-      ) : null}
+      <div className="flex items-center gap-1">
+        <NavLink to="/" end className={navLinkClasses}>
+          Home
+        </NavLink>
+        <NavLink to="/favourites" className={navLinkClasses}>
+          Favourite Cities
+        </NavLink>
+      </div>
 
       <div className="flex items-center gap-3">
         {currentUser ? (
           <>
             <i
-              className="bx bxs-user rounded-full bg-white/10 p-1.5 text-lg"
+              className="bx bxs-user rounded-[9999px] bg-white/10 p-1.5 text-lg"
               title={currentUser.email}
             ></i>
             <button
               onClick={handleLogout}
-              className="rounded-full bg-pop-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-pop-600"
+              className="rounded-[9999px] bg-pop-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-pop-600"
             >
               Logout
             </button>
@@ -58,7 +56,7 @@ export default function Navbar() {
         ) : (
           <Link
             to="/login"
-            className="rounded-full bg-pop-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-pop-600"
+            className="rounded-[9999px] bg-pop-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-pop-600"
           >
             Login
           </Link>
