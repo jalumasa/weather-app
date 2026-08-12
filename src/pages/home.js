@@ -15,7 +15,6 @@ import {
   Tooltip,
 } from "recharts";
 import { Link } from "react-router-dom";
-import "../assets/css/loader.css";
 import "../assets/css/mainPage.css";
 import "../assets/css/graph.css";
 import {
@@ -24,17 +23,13 @@ import {
   SunriseIcon,
   SunsetIcon,
 } from "../icons/StatIcons.js";
+import WeatherCanvas from "../components/WeatherCanvas.js";
+import useCountUp from "../hooks/useCountUp.js";
+import CitySearchBox from "../components/CitySearchBox.js";
 
 // Used when geolocation is denied or unavailable, so the app still has
 // something to show instead of getting stuck on "Failed to fetch weather data".
 const FALLBACK_LOCATION = { latitude: 1.3107, longitude: 36.825 };
-
-const currentDayTime = () => {
-  let dayTime = new Date();
-  const currentDate = dayTime.toISOString().slice(0, 10);
-  const currentTime = dayTime.toTimeString().slice(0, 8);
-  return `${currentDate} ${currentTime}`;
-};
 
 function Home({ weatherMain }) {
   const [loading, setLoading] = useState(false);
@@ -81,13 +76,25 @@ function Home({ weatherMain }) {
         const weatherMain = currentResponse.weather[0].main;
         const weatherDescription = currentResponse.weather[0].main.description;
 
-        const timeDay = currentDayTime();
-        const getDayOrNight = (timeDay) => {
-          const time = new Date(timeDay);
-          const hours = time.getHours();
-          return hours >= 6 && hours < 18 ? "day" : "night";
-        };
-        const timeOfDay = getDayOrNight(timeDay);
+        const latitude = currentResponse.coord.lat;
+        const longitude = currentResponse.coord.lon;
+
+        // Day vs night has to come from the searched city's own clock, not the
+        // viewer's - otherwise looking up Phoenix at 1pm from Nairobi renders a
+        // moon and a starfield over a 37C afternoon.
+        const tzResponse = await axios.get(
+          `/timeZone?lat=${latitude}&lon=${longitude}`
+        );
+        const cityNow = new Date(tzResponse.data.formatted);
+        const cityHour = cityNow.getHours();
+        const timeOfDay = cityHour >= 6 && cityHour < 18 ? "day" : "night";
+
+        const timeRefined = cityNow.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        });
+        setTimes({ time: timeRefined });
 
         const sunrise = new Date(
           currentResponse.sys.sunrise * 1000
@@ -130,22 +137,10 @@ function Home({ weatherMain }) {
           sunset: sunset,
           latitude: currentResponse.coord.lat,
           longitude: currentResponse.coord.lon,
+          // Drives the animated background (see components/WeatherCanvas).
+          condition: weatherMain,
+          timeOfDay: timeOfDay,
         });
-
-        const latitude = currentResponse.coord.lat;
-        const longitude = currentResponse.coord.lon;
-
-        const tzResponse = await axios.get(
-          `/timeZone?lat=${latitude}&lon=${longitude}`
-        );
-        const timeRefined = new Date(
-          tzResponse.data.formatted
-        ).toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        });
-        setTimes({ time: timeRefined });
 
         const word =
           cityName.charAt(0).toUpperCase() + cityName.slice(1).toLowerCase();
@@ -352,13 +347,20 @@ function Home({ weatherMain }) {
         const weatherDescription = response.data.weather[0].main.description;
         const forecastWeather = response2.data.list.slice(0, 40);
 
-        const timeDay = currentDayTime();
-        const getDayOrNight = (timeDay) => {
-          const time = new Date(timeDay);
-          const hours = time.getHours();
-          return hours >= 6 && hours < 18 ? "day" : "night";
-        };
-        const timeOfDay = getDayOrNight(timeDay);
+        // Day vs night from this location's own clock, not the viewer's -
+        // matters once this function is used for more than "wherever the
+        // browser's geolocation says I am" (see the search dropdown, which
+        // fetches by coordinates for exact, unambiguous matches).
+        const tzResponse = await axios.get(`/timeZone?lat=${lat}&lon=${long}`);
+        const cityNow = new Date(tzResponse.data.formatted);
+        const cityHour = cityNow.getHours();
+        const timeOfDay = cityHour >= 6 && cityHour < 18 ? "day" : "night";
+        const timeRefined = cityNow.toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        });
+        setTimes({ time: timeRefined });
 
         const today = new Date();
         const todayDate = new Date().toISOString().split("T")[0];
@@ -541,6 +543,9 @@ function Home({ weatherMain }) {
           feelsLike: response.data.main.feels_like,
           sunrise: sunrise,
           sunset: sunset,
+          // Drives the animated background (see components/WeatherCanvas).
+          condition: weatherMain,
+          timeOfDay: timeOfDay,
         });
         setLoading(false);
         setError("");
@@ -761,6 +766,10 @@ function Home({ weatherMain }) {
     }
   };
 
+  // Temperatures roll to their new value on each fetch rather than snapping.
+  const animatedTemp = useCountUp(data.celcius);
+  const animatedFeelsLike = useCountUp(data.feelsLike);
+
   const pillButtonClasses = (active) =>
     `rounded-[9999px] px-4 py-1.5 text-sm font-medium transition ${
       active
@@ -771,17 +780,17 @@ function Home({ weatherMain }) {
   return (
     <div data-cy="main-div" className="relative">
       {loading && (
-        <div className="loader">
-          <div className="loader__circle"></div>
-          <div className="loader__circle"></div>
-          <div className="loader__circle"></div>
-          <div className="loader__circle"></div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm">
+          <div className="spinner-ring" />
         </div>
       )}
 
-      <div className="mx-auto max-w-3xl px-4 pb-16 pt-6 text-white">
+      {/* Live condition-driven background: real rain, snow, stars, lightning. */}
+      <WeatherCanvas condition={data.condition} timeOfDay={data.timeOfDay} />
+
+      <div className="relative z-10 mx-auto max-w-3xl px-4 pb-16 pt-6 text-white">
         {/* Status row */}
-        <div className="mb-4 flex items-center justify-between text-sm text-white/70">
+        <div className="animate-fade mb-4 flex items-center justify-between text-sm text-white/70">
           {currentUser ? (
             <p>Welcome, {currentUser.email}</p>
           ) : (
@@ -796,22 +805,27 @@ function Home({ weatherMain }) {
         </div>
 
         {/* Search + units + favourite chips */}
-        <div className="glass-card p-4">
+        {/* Explicit z-index (not just the dropdown's) because the hero card
+            below also animates a transform, which makes it its own stacking
+            context - without this, its z-index:auto still paints over the
+            dropdown's z-20 since that z-20 can't escape this container. */}
+        <div className="glass-card animate-rise relative z-20 p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="search flex flex-1 items-center gap-2">
-              <input
-                type="text"
-                placeholder="Enter City name"
-                onChange={(e) => setName(e.target.value)}
-                className="w-full flex-1 rounded-[9999px] border border-white/25 bg-white/10 px-5 py-2.5 text-white placeholder-white/50 outline-none transition focus:border-sky-300 focus:bg-white/15 focus:ring-2 focus:ring-sky-300/40"
-              />
-              <button
-                onClick={handleClick}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[9999px] bg-gradient-to-r from-sky-500 to-pop-500 transition hover:opacity-90"
-              >
-                <i className="material-icons text-xl">search</i>
-              </button>
-            </div>
+            <CitySearchBox
+              value={name}
+              onChange={setName}
+              onSubmit={handleClick}
+              onSelect={(match, label) => {
+                // Fetch by the match's own coordinates rather than its name:
+                // OpenWeatherMap's name lookup ignores the state qualifier
+                // for US cities (q=Berlin,Illinois,US quietly resolves to
+                // Berlin, Germany), so a name round-trip can silently pick
+                // the wrong place even after the user picked the right one.
+                setName(label);
+                fetchWeatherData(match.lat, match.lon);
+                toast.success(label);
+              }}
+            />
             <div className="flex justify-center gap-2 sm:justify-start">
               <button onClick={metric} className={pillButtonClasses(units === "metric")}>
                 Metric
@@ -849,7 +863,10 @@ function Home({ weatherMain }) {
         {!error && (
           <>
             {/* Hero */}
-            <div className="glass-card mt-6 p-8 text-center">
+            <div
+              className="glass-card sheen animate-rise mt-6 p-8 text-center"
+              style={{ animationDelay: "0.08s" }}
+            >
               <div className="flex items-center justify-center gap-3">
                 <h1 className="text-3xl font-bold">
                   {data.name}, {data.country}
@@ -867,15 +884,15 @@ function Home({ weatherMain }) {
               </div>
               {times ? <p className="text-sm text-white/50">{times.time}</p> : null}
 
-              <p className="current-forecast mx-auto my-2 flex justify-center">
+              <p className="current-forecast float-gentle mx-auto my-2 flex justify-center">
                 {data.image}
               </p>
-              <p className="text-7xl font-bold">
-                {Math.round(data.celcius)}°{unitName.temp}
+              <p className="text-7xl font-bold tabular-nums">
+                {Math.round(animatedTemp)}°{unitName.temp}
               </p>
               <p className="mt-2 text-lg text-white/80">{data.description}</p>
               <p className="mt-1 text-white/60">
-                Feels like {Math.round(data.feelsLike)}°{unitName.temp}
+                Feels like {Math.round(animatedFeelsLike)}°{unitName.temp}
               </p>
               <p className="mt-1 text-sm text-white/50">
                 High: {Math.round(data.tempMax)}°{unitName.temp} / Low:{" "}
@@ -884,7 +901,7 @@ function Home({ weatherMain }) {
             </div>
 
             {/* Hourly forecast */}
-            <div className="mt-6">
+            <div className="animate-rise mt-6" style={{ animationDelay: "0.16s" }}>
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-white/60">
                 Today
               </h2>
@@ -908,7 +925,7 @@ function Home({ weatherMain }) {
             </div>
 
             {/* Weekly forecast */}
-            <div className="mt-6">
+            <div className="animate-rise mt-6" style={{ animationDelay: "0.24s" }}>
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-white/60">
                 7-Day Forecast
               </h2>
@@ -935,7 +952,10 @@ function Home({ weatherMain }) {
             </div>
 
             {/* Detail tiles */}
-            <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div
+              className="animate-rise mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4"
+              style={{ animationDelay: "0.32s" }}
+            >
               <div className="glass-card p-5 text-center transition hover:-translate-y-0.5">
                 <h3 className="text-xs font-medium uppercase tracking-wide text-white/60">
                   Humidity
@@ -972,7 +992,10 @@ function Home({ weatherMain }) {
             </div>
 
             {/* Trend graph */}
-            <div className="glass-card mt-6 p-6">
+            <div
+              className="glass-card animate-rise mt-6 p-6"
+              style={{ animationDelay: "0.4s" }}
+            >
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold">{dataKeyName(dataKey)}</h2>
                 <div className="flex gap-2">
