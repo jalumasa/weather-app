@@ -9,7 +9,7 @@
 
 .forecast-container::-webkit-scrollbar,
 .forecast-container2::-webkit-scrollbar {
-  height: 6px;
+  height: 3px;
 }
 
 .forecast-container::-webkit-scrollbar-track,
@@ -19,30 +19,29 @@
 
 .forecast-container::-webkit-scrollbar-thumb,
 .forecast-container2::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.25);
+  background-color: rgba(255, 255, 255, 0.09);
   border-radius: 999px;
 }
 
 .forecast-container::-webkit-scrollbar-thumb:hover,
 .forecast-container2::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.18);
 }
 
-/* Weather condition icon sizing (used by WeatherIcon.js output). */
-.current-forecast img {
-  width: 110px;
-  height: auto;
-  object-fit: contain;
+/* Weather glyph sizing (see weatherIcon.js). The icons are stroked SVGs that
+   inherit colour, so only the box needs setting here. Stroke width is scaled
+   down on the large hero glyph to keep the line weight optically even with
+   the small ones. */
+.current-forecast svg {
+  width: 104px;
+  height: 104px;
+  stroke-width: 0.5;
+  color: rgb(228, 228, 231);
 }
 
-.day-forecast img {
-  width: 44px;
-  height: 44px;
-  object-fit: contain;
-}
-
-.week-forecast img {
-  width: 44px;
-  height: 44px;
-  object-fit: contain;
+.day-forecast svg,
+.week-forecast svg {
+  width: 26px;
+  height: 26px;
+  color: rgb(180, 180, 180);
 }

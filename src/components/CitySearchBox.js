@@ -1,18 +1,16 @@
 import axios from "axios";
 import React, { useEffect, useRef, useState } from "react";
 
-// Regional indicator flag from an ISO 3166-1 alpha-2 country code, e.g. "US" -> 🇺🇸.
-const countryFlag = (countryCode) =>
-  (countryCode || "")
-    .toUpperCase()
-    .replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
-
-// Disambiguated label for a geocoding match, e.g. "Springfield, Illinois, US".
+// Splits a geocoding match into the city and the qualifier that disambiguates
+// it, so the row can lead with the name and mute the rest rather than running
+// "Springfield, Illinois, US" together at one weight.
 const describeMatch = (match) => {
-  const parts = [match.name];
-  if (match.state) parts.push(match.state);
-  parts.push(match.country);
-  return parts.join(", ");
+  const region = [match.state, match.country].filter(Boolean).join(", ");
+  return {
+    primary: match.name,
+    secondary: region,
+    full: [match.name, region].filter(Boolean).join(", "),
+  };
 };
 
 /*
@@ -96,7 +94,7 @@ function CitySearchBox({ value, onChange, onSelect, onSubmit }) {
     suppressNextSearchRef.current = true;
     setOpen(false);
     setMatches([]);
-    onSelect(match, describeMatch(match));
+    onSelect(match, describeMatch(match).full);
   };
 
   const handleKeyDown = (event) => {
@@ -139,12 +137,12 @@ function CitySearchBox({ value, onChange, onSelect, onSubmit }) {
           onChange={(e) => onChange(e.target.value)}
           onFocus={() => matches.length > 0 && setOpen(true)}
           onKeyDown={handleKeyDown}
-          className="w-full rounded-[9999px] border border-white/25 bg-white/10 px-5 py-2.5 text-white placeholder-white/50 outline-none transition focus:border-sky-300 focus:bg-white/15 focus:ring-2 focus:ring-sky-300/40"
+          className="w-full rounded-[9999px] bg-white/[0.05] px-4 py-2 text-small text-ink-100 placeholder-ink-500 outline-none transition-colors focus:bg-white/[0.08]"
         />
 
         {searching && (
           <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2">
-            <div className="h-4 w-4 animate-spin rounded-[9999px] border-2 border-white/25 border-t-white/70" />
+            <div className="h-3 w-3 animate-spin rounded-[9999px] border border-white/15 border-t-white/60" />
           </div>
         )}
 
@@ -152,14 +150,13 @@ function CitySearchBox({ value, onChange, onSelect, onSubmit }) {
           <ul
             id="city-search-listbox"
             role="listbox"
-            // Deliberately more opaque than .glass-card: this floats over
-            // whatever comes next in the layout (unit toggles, favourite
-            // chips on mobile's stacked search row), and the usual 10%
-            // glass tint let that content ghost through and muddy the list.
-            className="animate-rise absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-64 overflow-y-auto rounded-3xl border border-white/25 bg-dusk-900/90 p-1.5 text-left shadow-2xl backdrop-blur-2xl"
+            // Opaque rather than a translucent panel: this floats over live
+            // content, and letting that content ghost through made the list
+            // hard to read.
+            className="animate-rise absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-64 overflow-y-auto rounded-[20px] bg-ink-800 p-1.5 text-left shadow-2xl shadow-black/60"
           >
             {matches.map((match, index) => {
-              const label = describeMatch(match);
+              const { primary, secondary } = describeMatch(match);
               const isActive = index === highlighted;
               return (
                 <li key={`${match.lat}-${match.lon}-${index}`}>
@@ -168,14 +165,14 @@ function CitySearchBox({ value, onChange, onSelect, onSubmit }) {
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => pickMatch(match)}
                     onMouseEnter={() => setHighlighted(index)}
-                    className={`flex w-full items-center gap-2.5 rounded-2xl px-3 py-2 text-left text-sm transition ${
-                      isActive ? "bg-white/20 text-white" : "text-white/80 hover:bg-white/10"
+                    className={`flex w-full items-baseline gap-2 rounded-[14px] px-3 py-2 text-left text-small transition-colors ${
+                      isActive ? "bg-white/[0.07]" : ""
                     }`}
                   >
-                    <span className="text-base leading-none">
-                      {countryFlag(match.country)}
+                    <span className="shrink-0 text-ink-100">{primary}</span>
+                    <span className="truncate text-tiny text-ink-400">
+                      {secondary}
                     </span>
-                    <span className="flex-1 truncate">{label}</span>
                   </button>
                 </li>
               );
@@ -186,9 +183,10 @@ function CitySearchBox({ value, onChange, onSelect, onSubmit }) {
 
       <button
         onClick={onSubmit}
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[9999px] bg-gradient-to-r from-sky-500 to-pop-500 transition hover:opacity-90"
+        aria-label="Search"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9999px] bg-white/[0.05] text-ink-300 transition-colors hover:bg-white/[0.09] hover:text-ink-100"
       >
-        <i className="material-icons text-xl">search</i>
+        <i className="material-icons text-base">search</i>
       </button>
     </div>
   );

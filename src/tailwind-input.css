@@ -1,49 +1,46 @@
 @import "tailwindcss";
 
 /*
-  Design tokens for the RainCoat redesign: a bold/colorful palette meant to
-  sit behind glassmorphic (frosted, translucent) cards. Each color becomes a
-  Tailwind utility automatically, e.g. --color-sky-500 -> bg-sky-500/text-sky-500.
-  Values will get refined as real screens are built over the next few days;
-  this is the shared starting point so every page pulls from the same set.
+  RainCoat's design system.
 
-  This file is compiled by the Tailwind CLI (see package.json's build:css /
-  watch:css scripts) into src/tailwind.generated.css, which is what actually
-  gets imported by the app. Do not edit the generated file directly.
+  The rule: chrome is monochrome, colour belongs to content. The interface is
+  a near-black stage, and the only things allowed to carry colour are the
+  weather itself (the canvas wash behind everything) and the forecast icons.
+  No coloured buttons, no gradient text, no tinted borders.
+
+  Compiled by the Tailwind CLI (see package.json's build:css / watch:css) into
+  src/tailwind.generated.css, which is what the app imports. Don't edit the
+  generated file.
 */
 @theme {
-  /* Daytime sky: cyan -> blue, used for the default gradient background */
-  --color-sky-50: #eff9ff;
-  --color-sky-100: #d9f0ff;
-  --color-sky-300: #7dd3fc;
-  --color-sky-500: #0ea5e9;
-  --color-sky-700: #0369a1;
-  --color-sky-900: #0c4a6e;
+  /* Single neutral ramp. `ink` is the stage, ascending toward the light. */
+  --color-ink-950: #070707;
+  --color-ink-900: #0a0a0a;
+  --color-ink-850: #101010;
+  --color-ink-800: #161616;
+  --color-ink-700: #1f1f1f;
+  --color-ink-600: #2a2a2a;
+  --color-ink-500: #3d3d3d;
+  --color-ink-400: #6e6e6e;
+  --color-ink-300: #8f8f8f;
+  --color-ink-200: #b4b4b4;
+  --color-ink-100: #e4e4e7;
 
-  /* Night sky: indigo -> violet, used after dusk */
-  --color-dusk-100: #e0e0fd;
-  --color-dusk-300: #a5a6f6;
-  --color-dusk-500: #6366f1;
-  --color-dusk-700: #4338ca;
-  --color-dusk-900: #1e1b4b;
-
-  /* Sun/warmth accent: amber -> coral, for highlights and CTAs */
-  --color-sun-300: #fde68a;
-  --color-sun-500: #f59e0b;
-  --color-sun-600: #ea580c;
-
-  /* Energetic accent pop: pink/magenta, used sparingly for emphasis */
-  --color-pop-400: #f472b6;
-  --color-pop-500: #ec4899;
-  --color-pop-600: #db2777;
+  /* Type scale, deliberately small. Reference sites sit at 13-15px body. */
+  --text-micro: 0.6875rem;
+  --text-tiny: 0.75rem;
+  --text-small: 0.8125rem;
+  --text-body: 0.9375rem;
 }
 
 @layer base {
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
-      "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
-      "Helvetica Neue", sans-serif;
+    background-color: var(--color-ink-900);
+    color: var(--color-ink-100);
+    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+      "Roboto", "Helvetica Neue", sans-serif;
+    font-size: var(--text-body);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -52,26 +49,46 @@
     font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
       monospace;
   }
+
+  /* Tabular figures everywhere a temperature or a clock can change, so
+     digits don't jitter as they animate or tick. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
 }
 
 @layer components {
-  /* Frosted glass panel: the core building block of the redesign. */
-  .glass-card {
-    @apply rounded-3xl border border-white/25 bg-white/10 shadow-xl shadow-black/10 backdrop-blur-xl;
+  /*
+    The surface. Deliberately borderless - the reference sites separate
+    surfaces by luminance alone, and a visible white border is the single
+    biggest tell of the glassmorphism look we're moving away from.
+  */
+  .panel {
+    @apply rounded-[28px] bg-white/[0.04];
   }
 
-  .bg-gradient-day {
-    @apply bg-gradient-to-br from-sky-300 via-sky-500 to-dusk-500;
+  /* Slightly brighter surface for things sitting on top of a panel. */
+  .panel-raised {
+    @apply rounded-[20px] bg-white/[0.06];
   }
 
-  .bg-gradient-night {
-    @apply bg-gradient-to-br from-dusk-700 via-dusk-900 to-black;
+  /* Pill control, the one interactive shape used throughout. */
+  .pill {
+    @apply rounded-[9999px] px-3 py-1.5 text-small text-ink-300 transition-colors;
+  }
+
+  .pill:hover {
+    @apply bg-white/[0.06] text-ink-100;
+  }
+
+  .pill-active {
+    @apply bg-white/[0.10] text-ink-100;
   }
 
   /* Ring spinner shown while a weather fetch is in flight. */
   .spinner-ring {
-    @apply h-12 w-12 rounded-[9999px] border-4 border-white/20 border-t-pop-500;
-    animation: spin 0.8s linear infinite;
+    @apply h-8 w-8 rounded-[9999px] border-2 border-white/10 border-t-white/70;
+    animation: spin 0.7s linear infinite;
   }
 
   /* Entrance choreography. Sections stack in with a short upward drift; the
@@ -88,27 +105,6 @@
   .float-gentle {
     animation: float 6s ease-in-out infinite;
   }
-
-  /* Light sweep across the hero card - reads as sun moving over glass. */
-  .sheen {
-    position: relative;
-    overflow: hidden;
-  }
-
-  .sheen::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-      115deg,
-      transparent 30%,
-      rgba(255, 255, 255, 0.13) 45%,
-      transparent 60%
-    );
-    transform: translateX(-100%);
-    animation: sweep 7s ease-in-out infinite;
-    pointer-events: none;
-  }
 }
 
 @keyframes spin {
@@ -120,7 +116,7 @@
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(14px);
   }
   to {
     opacity: 1;
@@ -143,17 +139,7 @@
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-10px);
-  }
-}
-
-@keyframes sweep {
-  0%,
-  65% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
+    transform: translateY(-8px);
   }
 }
 
@@ -166,10 +152,5 @@
     animation: none;
     opacity: 1;
     transform: none;
-  }
-
-  .sheen::after {
-    animation: none;
-    opacity: 0;
   }
 }

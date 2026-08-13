@@ -163,6 +163,22 @@ function drawLightningBolt(ctx, startX, height) {
   ctx.restore();
 }
 
+/*
+  The condition wash: a single soft pool of colour low in the viewport that
+  the whole page sits on. Kept at very low alpha on purpose - it should read
+  as the room being lit differently, not as a coloured background. This is
+  what replaced the old full-bleed day/night gradient.
+*/
+const SCENE_WASH = {
+  rain: "70, 96, 128",
+  storm: "78, 88, 122",
+  snow: "120, 134, 156",
+  clouds: "96, 100, 110",
+  fog: "104, 106, 112",
+  stars: "48, 56, 96",
+  sun: "150, 116, 66",
+};
+
 function WeatherCanvas({ condition, timeOfDay }) {
   const canvasRef = useRef(null);
   const sceneRef = useRef(resolveScene(condition, timeOfDay));
@@ -215,6 +231,24 @@ function WeatherCanvas({ condition, timeOfDay }) {
       }
 
       ctx.clearRect(0, 0, width, height);
+
+      // Condition wash, painted first so particles sit on top of it.
+      const wash = SCENE_WASH[activeScene];
+      if (wash) {
+        const pool = ctx.createRadialGradient(
+          width * 0.5,
+          height * 1.02,
+          0,
+          width * 0.5,
+          height * 1.02,
+          Math.max(width, height) * 0.95
+        );
+        pool.addColorStop(0, `rgba(${wash}, 0.30)`);
+        pool.addColorStop(0.55, `rgba(${wash}, 0.09)`);
+        pool.addColorStop(1, `rgba(${wash}, 0)`);
+        ctx.fillStyle = pool;
+        ctx.fillRect(0, 0, width, height);
+      }
 
       switch (activeScene) {
         case "rain":
@@ -304,16 +338,17 @@ function WeatherCanvas({ condition, timeOfDay }) {
         }
 
         case "sun": {
-          // Warm glow anchored top-right, breathing slowly.
+          // Warm glow anchored top-right, breathing slowly. Deliberately
+          // faint - the condition wash already carries the warmth.
           const pulse = 0.5 + 0.5 * Math.sin(seconds * 0.5);
           drawBlob(
             ctx, width * 0.82, height * 0.08,
             Math.min(width, height) * 0.55,
-            0.1 + pulse * 0.05, "255, 214, 138"
+            0.05 + pulse * 0.03, "236, 214, 178"
           );
 
           particles.forEach((mote) => {
-            ctx.fillStyle = `rgba(255, 245, 214, ${mote.alpha})`;
+            ctx.fillStyle = `rgba(240, 238, 232, ${mote.alpha * 0.7})`;
             ctx.beginPath();
             ctx.arc(mote.x, mote.y, mote.radius, 0, Math.PI * 2);
             ctx.fill();

@@ -11,18 +11,11 @@ import {
   YAxis,
   XAxis,
   CartesianGrid,
-  Legend,
   Tooltip,
+  ResponsiveContainer,
 } from "recharts";
-import { Link } from "react-router-dom";
 import "../assets/css/mainPage.css";
 import "../assets/css/graph.css";
-import {
-  HumidityIcon,
-  WindIcon,
-  SunriseIcon,
-  SunsetIcon,
-} from "../icons/StatIcons.js";
 import WeatherCanvas from "../components/WeatherCanvas.js";
 import useCountUp from "../hooks/useCountUp.js";
 import CitySearchBox from "../components/CitySearchBox.js";
@@ -31,9 +24,90 @@ import CitySearchBox from "../components/CitySearchBox.js";
 // something to show instead of getting stuck on "Failed to fetch weather data".
 const FALLBACK_LOCATION = { latitude: 1.3107, longitude: 36.825 };
 
+/*
+  Forecast timestamps come back as UTC. Shifting a slot by the city's offset
+  and then reading it in UTC gives that city's wall clock, which is the only
+  clock worth showing - the forecast for Tokyo should read in Tokyo's hours no
+  matter where the browser is.
+
+  These live at module scope because both fetch paths (search by name, fetch by
+  coordinates) run the same pipeline, and keeping the date logic in one place is
+  what stops the two from drifting apart again.
+*/
+const cityClock = (unixSeconds, offsetSeconds = 0) =>
+  new Date((unixSeconds + offsetSeconds) * 1000);
+
+const cityTimeLabel = (date) =>
+  date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "UTC",
+  });
+
+const cityDayOrNight = (date) => {
+  const hours = date.getUTCHours();
+  return hours >= 6 && hours < 18 ? "day" : "night";
+};
+
+// YYYY-MM-DD in the city's own calendar, used to group slots into days.
+const cityDateKey = (date) => date.toISOString().split("T")[0];
+
+// "Friday" rather than "08/14". Noon avoids any edge where a midnight
+// timestamp could round to the neighbouring day.
+const weekdayLabel = (dateKey) =>
+  new Date(`${dateKey}T12:00:00Z`).toLocaleDateString("en-US", {
+    weekday: "long",
+    timeZone: "UTC",
+  });
+
+const shiftDateKey = (dateKey, days) => {
+  const shifted = new Date(`${dateKey}T12:00:00Z`);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
+  return cityDateKey(shifted);
+};
+
+/*
+  Temperature ramp for the 7-day range bars. This is the one place colour is
+  allowed into the interface, because here it *is* the data - the bar tells you
+  how hot a day is, not just where it sits. Stops are in Celsius and deliberately
+  muted; anything more saturated fights the near-black stage.
+*/
+const TEMP_STOPS = [
+  [-10, [110, 170, 225]],
+  [0, [128, 196, 228]],
+  [10, [150, 200, 175]],
+  [18, [222, 202, 128]],
+  [26, [230, 160, 100]],
+  [34, [226, 118, 95]],
+  [42, [214, 84, 84]],
+];
+
+const tempColor = (value, units) => {
+  // The ramp is defined in Celsius, so imperial readings convert first -
+  // otherwise 70F would be read as scorching.
+  const celsius = units === "imperial" ? ((value - 32) * 5) / 9 : value;
+
+  if (celsius <= TEMP_STOPS[0][0]) return `rgb(${TEMP_STOPS[0][1].join(",")})`;
+  const last = TEMP_STOPS[TEMP_STOPS.length - 1];
+  if (celsius >= last[0]) return `rgb(${last[1].join(",")})`;
+
+  for (let i = 0; i < TEMP_STOPS.length - 1; i += 1) {
+    const [lowTemp, lowRgb] = TEMP_STOPS[i];
+    const [highTemp, highRgb] = TEMP_STOPS[i + 1];
+    if (celsius >= lowTemp && celsius <= highTemp) {
+      const t = (celsius - lowTemp) / (highTemp - lowTemp);
+      const mixed = lowRgb.map((channel, c) =>
+        Math.round(channel + (highRgb[c] - channel) * t)
+      );
+      return `rgb(${mixed.join(",")})`;
+    }
+  }
+  return `rgb(${last[1].join(",")})`;
+};
+
 function Home({ weatherMain }) {
   const [loading, setLoading] = useState(false);
-  let [currentDateTime, setCurrentDateTime] = useState(new Date());
   const [data, setData] = useState([]);
   const [data2, setData2] = useState([]);
   const [name, setName] = useState("");
@@ -74,7 +148,7 @@ function Home({ weatherMain }) {
 
         const currentResponse = currentWeatherResponse.data;
         const weatherMain = currentResponse.weather[0].main;
-        const weatherDescription = currentResponse.weather[0].main.description;
+        const weatherDescription = currentResponse.weather[0].description;
 
         const latitude = currentResponse.coord.lat;
         const longitude = currentResponse.coord.lon;
@@ -96,21 +170,15 @@ function Home({ weatherMain }) {
         });
         setTimes({ time: timeRefined });
 
-        const sunrise = new Date(
-          currentResponse.sys.sunrise * 1000
-        ).toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        });
-
-        const sunset = new Date(
-          currentResponse.sys.sunset * 1000
-        ).toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        });
+        // Sunrise/sunset are unix UTC; without shifting by the city's offset
+        // they render in the viewer's zone, which had Phoenix rising at 3:48pm.
+        const cityOffset = currentResponse.timezone || 0;
+        const sunrise = cityTimeLabel(
+          cityClock(currentResponse.sys.sunrise, cityOffset)
+        );
+        const sunset = cityTimeLabel(
+          cityClock(currentResponse.sys.sunset, cityOffset)
+        );
 
         const description =
           currentResponse.weather[0].description.charAt(0).toUpperCase() +
@@ -146,102 +214,47 @@ function Home({ weatherMain }) {
           cityName.charAt(0).toUpperCase() + cityName.slice(1).toLowerCase();
         toast.success(word);
 
-        const today = new Date();
-        const todayDate = new Date().toISOString().split("T")[0];
-
-        const tomorrow = new Date();
-        tomorrow.setDate(today.getDate() + 1);
-        const tomorrowDate = tomorrow.toISOString().split("T")[0];
+        const tzOffset = forecastWeatherResponse.data.city.timezone || 0;
+        const todayDate = cityDateKey(cityClock(Date.now() / 1000, tzOffset));
+        const tomorrowDate = shiftDateKey(todayDate, 1);
 
         const forecastData = forecastWeatherResponse.data.list.slice(0, 40);
 
-        // Process forecast data for the day
-        const processedForecastData = forecastData
-          .map((forecast) => {
-            const getDayOrNight = (dateString) => {
-              const time = new Date(dateString);
-              const hours = time.getHours();
-              return hours >= 6 && hours < 18 ? "day" : "night";
-            };
-            const dateString = forecast.dt_txt;
-            const timeOfDay = getDayOrNight(dateString);
-            const forecastDate = new Date(dateString)
-              .toISOString()
-              .split("T")[0];
-            const convertToDate = new Date(dateString);
-            const options = {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-              weekday: "short",
-            };
-
-            const optionsTime = {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: true,
-            };
-            let formattedDateString = new Intl.DateTimeFormat(
-              "en-GB",
-              options
-            ).format(convertToDate);
-            const formattedTimeString = new Intl.DateTimeFormat(
-              "en-GB",
-              optionsTime
-            ).format(convertToDate);
-
-            const description =
-              forecast.weather[0].description.charAt(0).toUpperCase() +
-              forecast.weather[0].description.slice(1).toLowerCase();
-
-            const weatherMain = forecast.weather[0].main;
-            const weatherDescription = forecast.weather[0].main.description;
-
-            if (forecastDate === todayDate) {
-              return {
-                celcius: forecast.main.temp,
-                name: forecastWeatherResponse.data.city.name,
-                humidity: forecast.main.humidity,
-                speed: forecast.wind.speed,
-                image: (
-                  <WeatherIcon
-                    weatherMain={weatherMain}
-                    weatherDescription={weatherDescription}
-                    timeOfDay={timeOfDay}
-                  />
-                ),
-                description: description,
-                country: forecastWeatherResponse.data.city.country,
-                date: formattedDateString,
-                time: formattedTimeString,
-              };
-            } else {
-              return null;
-            }
-          })
-          .filter(Boolean);
+        // Hourly strip: a rolling 24 hours (eight 3-hourly slots) rather than
+        // "everything left in today", which late in the evening was one or two
+        // entries and read as broken.
+        const processedForecastData = forecastData.slice(0, 8).map((forecast) => {
+          const slot = cityClock(forecast.dt, tzOffset);
+          return {
+            celcius: forecast.main.temp,
+            image: (
+              <WeatherIcon
+                weatherMain={forecast.weather[0].main}
+                weatherDescription={forecast.weather[0].description}
+                timeOfDay={cityDayOrNight(slot)}
+              />
+            ),
+            time: cityTimeLabel(slot),
+          };
+        });
 
         // Process forecast data for the week
+        // Group by the city's own calendar day, so a slot near midnight lands
+        // on the day it belongs to there rather than in UTC.
         const groupedData = forecastData.reduce((acc, forecast) => {
-          if (forecast.dt_txt) {
-            const dateString = forecast.dt_txt.split(" ")[0];
-            if (!acc[dateString]) {
-              acc[dateString] = [];
-            }
-            acc[dateString].push(forecast);
+          const dayKey = cityDateKey(cityClock(forecast.dt, tzOffset));
+          if (!acc[dayKey]) {
+            acc[dayKey] = [];
           }
+          acc[dayKey].push(forecast);
           return acc;
         }, {});
 
         const processedForecastData2 = Object.keys(groupedData).map(
           (date) => {
-            const dateString = "2024-06-04 12:00:00";
-            const getDayOrNight = (dateString) => {
-              const time = new Date(dateString);
-              const hours = time.getHours();
-              return hours >= 6 && hours < 18 ? "day" : "night";
-            };
-            const timeOfDay = getDayOrNight(dateString);
+            // A weekly row stands for a whole day, so it always takes the
+            // daytime glyph (this used to be derived from a hardcoded date).
+            const timeOfDay = "day";
             const dayForecasts = groupedData[date];
             const total = dayForecasts.reduce(
               (acc, forecast) => {
@@ -256,6 +269,12 @@ function Home({ weatherMain }) {
             const averageTemp = total.temp / dayForecasts.length;
             const averageHumidity = total.humidity / dayForecasts.length;
             const averageWind = total.wind / dayForecasts.length;
+            const minTemp = Math.min(
+              ...dayForecasts.map((f) => f.main.temp_min)
+            );
+            const maxTemp = Math.max(
+              ...dayForecasts.map((f) => f.main.temp_max)
+            );
 
             let formattedDateString = "";
             if (date === todayDate) {
@@ -263,13 +282,7 @@ function Home({ weatherMain }) {
             } else if (date === tomorrowDate) {
               formattedDateString = "Tomorrow";
             } else {
-              formattedDateString = new Date(date).toLocaleDateString(
-                "en-US",
-                {
-                  month: "2-digit",
-                  day: "2-digit",
-                }
-              );
+              formattedDateString = weekdayLabel(date);
             }
 
             const description =
@@ -291,6 +304,8 @@ function Home({ weatherMain }) {
               averageTemp: averageTemp.toFixed(1),
               averageWind: averageWind.toFixed(1),
               averageHumidity: averageHumidity.toFixed(1),
+              minTemp,
+              maxTemp,
               description: description,
             };
           }
@@ -344,7 +359,7 @@ function Home({ weatherMain }) {
         console.log(response2);
 
         const weatherMain = response.data.weather[0].main;
-        const weatherDescription = response.data.weather[0].main.description;
+        const weatherDescription = response.data.weather[0].description;
         const forecastWeather = response2.data.list.slice(0, 40);
 
         // Day vs night from this location's own clock, not the viewer's -
@@ -362,100 +377,44 @@ function Home({ weatherMain }) {
         });
         setTimes({ time: timeRefined });
 
-        const today = new Date();
-        const todayDate = new Date().toISOString().split("T")[0];
+        const tzOffset = response2.data.city.timezone || 0;
+        const todayDate = cityDateKey(cityClock(Date.now() / 1000, tzOffset));
+        const tomorrowDate = shiftDateKey(todayDate, 1);
 
-        const tomorrowDate = (() => {
-          const tomorrow = new Date();
-          tomorrow.setDate(today.getDate() + 1);
-          return tomorrow.toISOString().split("T")[0];
-        })();
+        // Hourly strip: a rolling 24 hours (eight 3-hourly slots) rather than
+        // "everything left in today", which late in the evening was one or two
+        // entries and read as broken.
+        const processedForecastData = forecastWeather.slice(0, 8).map((forecast) => {
+          const slot = cityClock(forecast.dt, tzOffset);
+          return {
+            celcius: forecast.main.temp,
+            image: (
+              <WeatherIcon
+                weatherMain={forecast.weather[0].main}
+                weatherDescription={forecast.weather[0].description}
+                timeOfDay={cityDayOrNight(slot)}
+              />
+            ),
+            time: cityTimeLabel(slot),
+          };
+        });
 
-        //forecasted data for the day
-        const processedForecastData = forecastWeather
-          .map((forecast) => {
-            const getDayOrNight = (dateString) => {
-              const time = new Date(dateString);
-              const hours = time.getHours();
-              return hours >= 6 && hours < 18 ? "day" : "night";
-            };
-
-            const dateString = forecast.dt_txt;
-            const forecastDate = new Date(dateString)
-              .toISOString()
-              .split("T")[0];
-            const timeOfDay = getDayOrNight(dateString);
-
-            let formattedDateString = new Date(dateString).toLocaleDateString(
-              "en-GB",
-              {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-                weekday: "short",
-              }
-            );
-
-            const formattedTimeString = new Date(
-              dateString
-            ).toLocaleTimeString("en-GB", {
-              hour: "2-digit",
-              minute: "2-digit",
-              hour12: true,
-            });
-
-            const description =
-              forecast.weather[0].description.charAt(0).toUpperCase() +
-              forecast.weather[0].description.slice(1).toLowerCase();
-
-            const weatherMain = forecast.weather[0].main;
-            const weatherDescription = forecast.weather[0].main.description;
-
-            if (forecastDate === todayDate) {
-              return {
-                celcius: forecast.main.temp,
-                name: response2.data.city.name,
-                humidity: forecast.main.humidity,
-                speed: forecast.wind.speed,
-                image: (
-                  <WeatherIcon
-                    weatherMain={weatherMain}
-                    weatherDescription={weatherDescription}
-                    timeOfDay={timeOfDay}
-                  />
-                ),
-                description: description,
-                country: response2.data.city.country,
-                date: formattedDateString,
-                time: formattedTimeString,
-              };
-            } else {
-              return null;
-            }
-          })
-          .filter(Boolean);
-
+        // Group by the city's own calendar day, so a slot near midnight lands
+        // on the day it belongs to there rather than in UTC.
         const groupedData = forecastWeather.reduce((acc, forecast) => {
-          if (forecast.dt_txt) {
-            // Ensure dt_txt exists
-            const dateString = forecast.dt_txt.split(" ")[0];
-            if (!acc[dateString]) {
-              acc[dateString] = [];
-            }
-            acc[dateString].push(forecast);
+          const dayKey = cityDateKey(cityClock(forecast.dt, tzOffset));
+          if (!acc[dayKey]) {
+            acc[dayKey] = [];
           }
+          acc[dayKey].push(forecast);
           return acc;
         }, {});
 
         const processedForecastData2 = Object.keys(groupedData).map(
           (date) => {
-            const dateString = "2024-06-04 12:00:00";
-            const getDayOrNight = (dateString) => {
-              const time = new Date(dateString);
-              const hours = time.getHours();
-              return hours >= 6 && hours < 18 ? "day" : "night";
-            };
-            const timeOfDay = getDayOrNight(dateString);
+            // A weekly row stands for a whole day, so it always takes the
+            // daytime glyph (this used to be derived from a hardcoded date).
+            const timeOfDay = "day";
             const dayForecasts = groupedData[date];
             const total = dayForecasts.reduce(
               (acc, forecast) => {
@@ -470,6 +429,12 @@ function Home({ weatherMain }) {
             const averageTemp = total.temp / dayForecasts.length;
             const averageHumidity = total.humidity / dayForecasts.length;
             const averageWind = total.wind / dayForecasts.length;
+            const minTemp = Math.min(
+              ...dayForecasts.map((f) => f.main.temp_min)
+            );
+            const maxTemp = Math.max(
+              ...dayForecasts.map((f) => f.main.temp_max)
+            );
 
             let formattedDateString = "";
             if (date === todayDate) {
@@ -477,13 +442,7 @@ function Home({ weatherMain }) {
             } else if (date === tomorrowDate) {
               formattedDateString = "Tomorrow";
             } else {
-              formattedDateString = new Date(date).toLocaleDateString(
-                "en-US",
-                {
-                  month: "2-digit",
-                  day: "2-digit",
-                }
-              );
+              formattedDateString = weekdayLabel(date);
             }
 
             const description =
@@ -505,6 +464,8 @@ function Home({ weatherMain }) {
               averageTemp: averageTemp.toFixed(1),
               averageWind: averageWind.toFixed(1),
               averageHumidity: averageHumidity.toFixed(1),
+              minTemp,
+              maxTemp,
               description: description,
             };
           }
@@ -513,12 +474,14 @@ function Home({ weatherMain }) {
         setTodaysData(processedForecastData);
         setData2(processedForecastData2);
 
-        const sunrise = new Date(
-          response.data.sys.sunrise * 1000
-        ).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-        const sunset = new Date(
-          response.data.sys.sunset * 1000
-        ).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+        // Same shift as the search path - these are unix UTC timestamps.
+        const cityOffset = response.data.timezone || 0;
+        const sunrise = cityTimeLabel(
+          cityClock(response.data.sys.sunrise, cityOffset)
+        );
+        const sunset = cityTimeLabel(
+          cityClock(response.data.sys.sunset, cityOffset)
+        );
 
         const description =
           response.data.weather[0].description.charAt(0).toUpperCase() +
@@ -672,20 +635,6 @@ function Home({ weatherMain }) {
     setUnitName({ temp: "F", speed: "Mph" });
   };
 
-  //Making sure that the time and date is being refreshed
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      setCurrentDateTime(new Date());
-    }, 1000);
-    return () => clearInterval(intervalId);
-  }, []);
-
-  const formattedTime = currentDateTime.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-
   useEffect(() => {
     if (data2.length > 0) {
       weeklyGraph("temp");
@@ -703,19 +652,6 @@ function Home({ weatherMain }) {
       conditionName = `Wind (${unitName.speed})`;
     }
     return conditionName;
-  };
-
-  const getColor = (key) => {
-    switch (key) {
-      case "Temperature":
-        return "#ec4899"; // pop-500
-      case "Humidity":
-        return "#0ea5e9"; // sky-500
-      case "Wind":
-        return "#a5a6f6"; // dusk-300
-      default:
-        return "#ffffff";
-    }
   };
 
   //Adding a favourite city to the db
@@ -770,295 +706,341 @@ function Home({ weatherMain }) {
   const animatedTemp = useCountUp(data.celcius);
   const animatedFeelsLike = useCountUp(data.feelsLike);
 
-  const pillButtonClasses = (active) =>
-    `rounded-[9999px] px-4 py-1.5 text-sm font-medium transition ${
-      active
-        ? "bg-white/20 text-white"
-        : "text-white/70 hover:bg-white/10 hover:text-white"
-    }`;
+  const pillClasses = (active) => `pill ${active ? "pill-active" : ""}`;
+
+  // Shared scale for the 7-day range bars, so every row is measured against
+  // the same week - that's what makes the bars comparable at a glance.
+  const weekLow = data2.length
+    ? Math.min(...data2.map((day) => day.minTemp))
+    : 0;
+  const weekHigh = data2.length
+    ? Math.max(...data2.map((day) => day.maxTemp))
+    : 0;
+  const weekSpan = weekHigh - weekLow || 1;
+
+  const isSaved = favourites.some((fav) => fav.name === data.name);
 
   return (
     <div data-cy="main-div" className="relative">
       {loading && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/10 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="spinner-ring" />
         </div>
       )}
 
-      {/* Live condition-driven background: real rain, snow, stars, lightning. */}
+      {/* Live condition-driven background: rain, snow, stars, lightning. */}
       <WeatherCanvas condition={data.condition} timeOfDay={data.timeOfDay} />
 
-      <div className="relative z-10 mx-auto max-w-3xl px-4 pb-16 pt-6 text-white">
-        {/* Status row */}
-        <div className="animate-fade mb-4 flex items-center justify-between text-sm text-white/70">
-          {currentUser ? (
-            <p>Welcome, {currentUser.email}</p>
-          ) : (
-            <p>
-              <Link to="/login" className="text-sky-300 hover:text-sky-200">
-                Log in
-              </Link>{" "}
-              to save favourite cities
-            </p>
-          )}
-          <p>{formattedTime}</p>
-        </div>
-
-        {/* Search + units + favourite chips */}
-        {/* Explicit z-index (not just the dropdown's) because the hero card
-            below also animates a transform, which makes it its own stacking
-            context - without this, its z-index:auto still paints over the
-            dropdown's z-20 since that z-20 can't escape this container. */}
-        <div className="glass-card animate-rise relative z-20 p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <CitySearchBox
-              value={name}
-              onChange={setName}
-              onSubmit={handleClick}
-              onSelect={(match, label) => {
-                // Fetch by the match's own coordinates rather than its name:
-                // OpenWeatherMap's name lookup ignores the state qualifier
-                // for US cities (q=Berlin,Illinois,US quietly resolves to
-                // Berlin, Germany), so a name round-trip can silently pick
-                // the wrong place even after the user picked the right one.
-                setName(label);
-                fetchWeatherData(match.lat, match.lon);
-                toast.success(label);
-              }}
-            />
-            <div className="flex justify-center gap-2 sm:justify-start">
-              <button onClick={metric} className={pillButtonClasses(units === "metric")}>
-                Metric
-              </button>
-              <button onClick={imperial} className={pillButtonClasses(units === "imperial")}>
-                Imperial
-              </button>
-            </div>
+      <div className="relative z-10 mx-auto max-w-2xl px-6 pb-24">
+        {/*
+          The command row is the app's real navigation - searching and
+          switching saved locations is all the moving around there is to do,
+          so it sits with the content rather than in the chrome. Explicit
+          z-index because the hero below animates a transform, which makes it
+          its own stacking context that the dropdown's z-index can't escape.
+        */}
+        <div className="animate-fade relative z-20 flex items-center gap-2">
+          <CitySearchBox
+            value={name}
+            onChange={setName}
+            onSubmit={handleClick}
+            onSelect={(match, label) => {
+              // Fetch by the match's own coordinates rather than its name:
+              // OpenWeatherMap's name lookup ignores the state qualifier for
+              // US cities (q=Berlin,Illinois,US quietly resolves to Berlin,
+              // Germany), so a name round-trip can silently pick the wrong
+              // place even after the user picked the right one.
+              setName(label);
+              fetchWeatherData(match.lat, match.lon);
+              toast.success(label);
+            }}
+          />
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              onClick={metric}
+              className={pillClasses(units === "metric")}
+            >
+              °C
+            </button>
+            <button
+              onClick={imperial}
+              className={pillClasses(units === "imperial")}
+            >
+              °F
+            </button>
           </div>
-
-          {currentUser && favourites.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2 border-t border-white/10 pt-3">
-              {favourites.map((favourite, index) => (
-                <button
-                  key={index}
-                  onClick={() => {
-                    setName(favourite.name);
-                    setClickedFavourites(true);
-                  }}
-                  className="rounded-[9999px] bg-white/10 px-3 py-1 text-xs text-white/80 transition hover:bg-white/20 hover:text-white"
-                >
-                  {favourite.name}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
+
+        {/* Saved locations, inline - this is what the old Favourites page was. */}
+        {currentUser && favourites.length > 0 && (
+          <div className="animate-fade forecast-container mt-2 flex gap-0.5 overflow-x-auto">
+            {favourites.map((favourite) => (
+              <button
+                key={favourite._id}
+                onClick={() => {
+                  setName(favourite.name);
+                  setClickedFavourites(true);
+                }}
+                className={`${pillClasses(
+                  favourite.name === data.name
+                )} shrink-0 whitespace-nowrap`}
+              >
+                {favourite.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {error && (
-          <p className="mt-4 rounded-lg border border-pop-500/40 bg-pop-500/20 px-3 py-2 text-center text-sm text-pop-400">
-            {error}
-          </p>
+          <p className="mt-20 text-center text-small text-ink-400">{error}</p>
         )}
 
         {!error && (
           <>
-            {/* Hero */}
-            <div
-              className="glass-card sheen animate-rise mt-6 p-8 text-center"
-              style={{ animationDelay: "0.08s" }}
-            >
-              <div className="flex items-center justify-center gap-3">
-                <h1 className="text-3xl font-bold">
-                  {data.name}, {data.country}
+            {/*
+              The hero sits directly on the stage rather than in a card. The
+              temperature is the largest thing in the app on purpose - it's
+              the one number anyone actually opened this to read.
+            */}
+            <header className="animate-rise mt-14 text-center">
+              <div className="flex items-center justify-center gap-2.5">
+                <h1 className="text-tiny uppercase tracking-[0.2em] text-ink-300">
+                  {data.name}
+                  {data.country ? `, ${data.country}` : ""}
                 </h1>
                 <button
-                  className="favourites transition hover:scale-110"
                   onClick={() => toggleFavourite(data.name)}
+                  aria-label={isSaved ? "Remove from saved" : "Save location"}
+                  className="text-tiny text-ink-500 transition-colors hover:text-ink-100"
                 >
-                  {favourites.some((fav) => fav.name === data.name) ? (
-                    <i className="fa-solid fa-heart text-2xl text-pop-500"></i>
-                  ) : (
-                    <i className="fa-regular fa-heart text-2xl text-white"></i>
-                  )}
+                  <i
+                    className={`${isSaved ? "fa-solid text-ink-100" : "fa-regular"} fa-bookmark`}
+                  ></i>
                 </button>
               </div>
-              {times ? <p className="text-sm text-white/50">{times.time}</p> : null}
 
-              <p className="current-forecast float-gentle mx-auto my-2 flex justify-center">
+              <div className="current-forecast float-gentle mt-10 flex justify-center">
                 {data.image}
-              </p>
-              <p className="text-7xl font-bold tabular-nums">
-                {Math.round(animatedTemp)}°{unitName.temp}
-              </p>
-              <p className="mt-2 text-lg text-white/80">{data.description}</p>
-              <p className="mt-1 text-white/60">
-                Feels like {Math.round(animatedFeelsLike)}°{unitName.temp}
-              </p>
-              <p className="mt-1 text-sm text-white/50">
-                High: {Math.round(data.tempMax)}°{unitName.temp} / Low:{" "}
-                {Math.round(data.tempMin)}°{unitName.temp}
-              </p>
-            </div>
+              </div>
 
-            {/* Hourly forecast */}
-            <div className="animate-rise mt-6" style={{ animationDelay: "0.16s" }}>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-white/60">
-                Today
+              <p className="tnum mt-8 text-[6.5rem] font-extralight leading-[0.85] tracking-tighter text-ink-100">
+                {Math.round(animatedTemp)}°
+              </p>
+
+              <p className="mt-6 text-body text-ink-200">{data.description}</p>
+
+              <p className="tnum mt-2 text-small text-ink-400">
+                Feels {Math.round(animatedFeelsLike)}° &nbsp;·&nbsp; H{" "}
+                {Math.round(data.tempMax)}° &nbsp;·&nbsp; L{" "}
+                {Math.round(data.tempMin)}°
+                {times && times.time ? (
+                  <>
+                    {" "}
+                    &nbsp;·&nbsp; {times.time} local
+                  </>
+                ) : null}
+              </p>
+            </header>
+
+            {/* Hourly */}
+            <section
+              className="animate-rise mt-16"
+              style={{ animationDelay: "0.08s" }}
+            >
+              <h2 className="mb-5 text-micro uppercase tracking-[0.18em] text-ink-400">
+                Next 24 hours
               </h2>
-              <div className="forecast-container flex gap-3 overflow-x-auto pb-2">
+              <div className="forecast-container flex gap-7 overflow-x-auto pb-1">
                 {todaysData.map((forecast, index) => (
                   <div
                     key={index}
-                    className="glass-card flex shrink-0 flex-col items-center px-4 py-3 text-center"
+                    className="flex shrink-0 flex-col items-center gap-2.5"
                     style={{ scrollSnapAlign: "start" }}
                   >
-                    <p className="text-sm text-white/60">{forecast.time}</p>
-                    <p className="day-forecast my-1 flex justify-center">
+                    <span className="tnum text-tiny text-ink-400">
+                      {forecast.time}
+                    </span>
+                    <span className="day-forecast flex justify-center">
                       {forecast.image}
-                    </p>
-                    <p className="font-semibold">
-                      {Math.round(forecast.celcius)}°{unitName.temp}
-                    </p>
+                    </span>
+                    <span className="tnum text-small text-ink-100">
+                      {Math.round(forecast.celcius)}°
+                    </span>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
 
-            {/* Weekly forecast */}
-            <div className="animate-rise mt-6" style={{ animationDelay: "0.24s" }}>
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-white/60">
-                7-Day Forecast
+            {/*
+              Seven-day as rows with range bars rather than a card per day.
+              A single averaged number hid the day's actual spread; the bar
+              shows where each day sits against the whole week.
+            */}
+            <section
+              className="animate-rise mt-14"
+              style={{ animationDelay: "0.16s" }}
+            >
+              <h2 className="mb-5 text-micro uppercase tracking-[0.18em] text-ink-400">
+                Next 7 days
               </h2>
-              <div className="forecast-container2 flex gap-3 overflow-x-auto pb-2">
-                {data2.map((forecast, index) => (
+              <div className="panel px-5">
+                {data2.map((forecast, index) => {
+                  const offset =
+                    ((forecast.minTemp - weekLow) / weekSpan) * 100;
+                  const width =
+                    ((forecast.maxTemp - forecast.minTemp) / weekSpan) * 100;
+                  return (
+                    <div
+                      key={index}
+                      className="flex items-center gap-3 border-t border-white/[0.05] py-3.5 first:border-t-0 sm:gap-4"
+                    >
+                      <span className="w-[4.5rem] shrink-0 truncate text-small text-ink-300 sm:w-24">
+                        {forecast.day}
+                      </span>
+                      <span className="week-forecast flex w-7 shrink-0 justify-center">
+                        {forecast.image}
+                      </span>
+                      <span className="tnum w-9 shrink-0 text-right text-small text-ink-400">
+                        {Math.round(forecast.minTemp)}°
+                      </span>
+                      <div className="relative h-[5px] flex-1 rounded-[9999px] bg-white/[0.06]">
+                        <div
+                          className="absolute h-[5px] rounded-[9999px]"
+                          style={{
+                            left: `${offset}%`,
+                            width: `${Math.max(width, 6)}%`,
+                            backgroundImage: `linear-gradient(90deg, ${tempColor(
+                              forecast.minTemp,
+                              units
+                            )}, ${tempColor(forecast.maxTemp, units)})`,
+                          }}
+                        />
+                      </div>
+                      <span className="tnum w-9 shrink-0 text-small text-ink-100">
+                        {Math.round(forecast.maxTemp)}°
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* Conditions. Numbers carry these - no icons competing with them. */}
+            <section
+              className="animate-rise mt-14"
+              style={{ animationDelay: "0.24s" }}
+            >
+              <h2 className="mb-5 text-micro uppercase tracking-[0.18em] text-ink-400">
+                Conditions
+              </h2>
+              <div className="panel grid grid-cols-2 sm:grid-cols-4">
+                {[
+                  { label: "Humidity", value: `${data.humidity}%` },
+                  {
+                    label: "Wind",
+                    value: `${Math.round(data.speed)} ${unitName.speed}`,
+                  },
+                  { label: "Sunrise", value: data.sunrise },
+                  { label: "Sunset", value: data.sunset },
+                ].map((stat) => (
                   <div
-                    key={index}
-                    className="glass-card flex w-28 shrink-0 flex-col items-center px-4 py-3 text-center"
-                    style={{ scrollSnapAlign: "start" }}
+                    key={stat.label}
+                    className="border-b border-white/[0.05] px-5 py-5 sm:border-b-0 sm:border-r sm:last:border-r-0 [&:nth-child(n+3)]:border-b-0"
                   >
-                    <p className="text-sm text-white/60">{forecast.day}</p>
-                    <p className="week-forecast my-1 flex justify-center">
-                      {forecast.image}
+                    <p className="text-micro uppercase tracking-[0.14em] text-ink-400">
+                      {stat.label}
                     </p>
-                    <p className="font-semibold">
-                      {Math.round(forecast.averageTemp)}°{unitName.temp}
-                    </p>
-                    <p className="mt-1 text-xs text-white/50">
-                      {forecast.description}
+                    <p className="tnum mt-2 text-xl font-light text-ink-100">
+                      {stat.value}
                     </p>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
 
-            {/* Detail tiles */}
-            <div
-              className="animate-rise mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4"
+            {/* Trend */}
+            <section
+              className="animate-rise mt-14"
               style={{ animationDelay: "0.32s" }}
             >
-              <div className="glass-card p-5 text-center transition hover:-translate-y-0.5">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-white/60">
-                  Humidity
-                </h3>
-                <HumidityIcon className="mx-auto my-3 h-14 w-14" />
-                <p className="text-2xl font-bold">{data.humidity}%</p>
-              </div>
-
-              <div className="glass-card p-5 text-center transition hover:-translate-y-0.5">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-white/60">
-                  Wind
-                </h3>
-                <WindIcon className="mx-auto my-3 h-14 w-14" />
-                <p className="text-2xl font-bold">
-                  {Math.round(data.speed)} {unitName.speed}
-                </p>
-              </div>
-
-              <div className="glass-card p-5 text-center transition hover:-translate-y-0.5">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-white/60">
-                  Sunrise
-                </h3>
-                <SunriseIcon className="mx-auto my-3 h-14 w-14" />
-                <p className="text-lg font-bold">{data.sunrise}</p>
-              </div>
-
-              <div className="glass-card p-5 text-center transition hover:-translate-y-0.5">
-                <h3 className="text-xs font-medium uppercase tracking-wide text-white/60">
-                  Sunset
-                </h3>
-                <SunsetIcon className="mx-auto my-3 h-14 w-14" />
-                <p className="text-lg font-bold">{data.sunset}</p>
-              </div>
-            </div>
-
-            {/* Trend graph */}
-            <div
-              className="glass-card animate-rise mt-6 p-6"
-              style={{ animationDelay: "0.4s" }}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold">{dataKeyName(dataKey)}</h2>
-                <div className="flex gap-2">
+              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-micro uppercase tracking-[0.18em] text-ink-400">
+                  {dataKeyName(dataKey)}
+                </h2>
+                <div className="flex gap-0.5">
                   <button
                     onClick={() => weeklyGraph("temp")}
-                    className={pillButtonClasses(dataKey === "Temperature")}
+                    className={pillClasses(dataKey === "Temperature")}
                   >
                     Temp
                   </button>
                   <button
                     onClick={() => weeklyGraph("humidity")}
-                    className={pillButtonClasses(dataKey === "Humidity")}
+                    className={pillClasses(dataKey === "Humidity")}
                   >
                     Humidity
                   </button>
                   <button
                     onClick={() => weeklyGraph("wind")}
-                    className={pillButtonClasses(dataKey === "Wind")}
+                    className={pillClasses(dataKey === "Wind")}
                   >
                     Wind
                   </button>
                 </div>
               </div>
-              <div className="mt-4 flex justify-center overflow-x-auto">
-                <LineChart
-                  width={600}
-                  height={300}
-                  data={weeklyData}
-                  margin={{
-                    top: 20,
-                    right: 20,
-                    left: 20,
-                    bottom: 20,
-                  }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                  <XAxis dataKey="name" />
-                  <YAxis
-                    label={{
-                      value: dataKeyName(dataKey),
-                      angle: -90,
-                      position: "insideLeft",
-                    }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "rgba(30, 27, 75, 0.9)",
-                      border: "1px solid rgba(255,255,255,0.15)",
-                      borderRadius: "10px",
-                      color: "white",
-                    }}
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey={dataKey}
-                    stroke={getColor(dataKey)}
-                    strokeWidth={2.5}
-                    activeDot={{ r: 8 }}
-                  />
-                </LineChart>
+
+              <div className="panel py-6 pr-5">
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart
+                    data={weeklyData}
+                    margin={{ top: 5, right: 5, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      vertical={false}
+                      stroke="rgba(255,255,255,0.05)"
+                    />
+                    <XAxis
+                      dataKey="name"
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 11 }}
+                    />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      width={38}
+                      tick={{ fontSize: 11 }}
+                      // Fit the axis to the data instead of anchoring at zero;
+                      // a week of 28-29C against a 0-32 axis renders as a flat
+                      // line and hides the shape entirely.
+                      domain={[
+                        (min) => Math.floor(min - 2),
+                        (max) => Math.ceil(max + 2),
+                      ]}
+                      allowDecimals={false}
+                    />
+                    <Tooltip
+                      cursor={{ stroke: "rgba(255,255,255,0.15)" }}
+                      contentStyle={{
+                        backgroundColor: "#161616",
+                        border: "none",
+                        borderRadius: "12px",
+                        color: "#e4e4e7",
+                        fontSize: "0.8125rem",
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey={dataKey}
+                      stroke="#e4e4e7"
+                      strokeWidth={1.5}
+                      dot={false}
+                      activeDot={{ r: 3, fill: "#e4e4e7" }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
-            </div>
+            </section>
           </>
         )}
       </div>

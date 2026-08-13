@@ -5,7 +5,6 @@ import { Toaster } from "react-hot-toast";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import "./App.css";
 import { AuthProvider } from "./contexts/AuthContext";
-import Favourites from "./pages/favourites";
 import Home from "./pages/home";
 import Login from "./pages/login";
 import SignUp from "./pages/signup";
@@ -13,26 +12,33 @@ import Navbar from "./source/navbar"
 
 axios.defaults.baseURL = "/api/";
 
-// Same day/night atmosphere used by the weather card, hoisted so every page
-// (not just the dashboard) sits on the right gradient.
-const currentHour = new Date().getHours();
-const isDaytime = currentHour >= 6 && currentHour < 18;
-
+// The shell is a flat near-black stage. Any sense of weather or time of day
+// comes from the canvas the dashboard paints behind itself, not from here -
+// a global gradient could only ever reflect the viewer's clock, not the
+// clock of whatever city they're actually looking at.
 function App() {
   return (
-    <div
-      className={`min-h-screen ${
-        isDaytime ? "bg-gradient-day" : "bg-gradient-night"
-      }`}
-    >
+    <div className="min-h-screen bg-ink-900">
       <AuthProvider>
         <BrowserRouter>
           <Navbar/>
-          <Toaster position="top-right" toastOptions={{ duration: 1500 }} />
+          <Toaster
+            position="top-center"
+            toastOptions={{
+              duration: 1500,
+              style: {
+                background: "#161616",
+                color: "#e4e4e7",
+                border: "none",
+                fontSize: "0.8125rem",
+                borderRadius: "9999px",
+                padding: "0.5rem 0.9rem",
+              },
+            }}
+          />
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/home" element={<Home />} />
-            <Route path="/favourites" element={<Favourites />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<SignUp />} />
           </Routes>

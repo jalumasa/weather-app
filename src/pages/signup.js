@@ -30,18 +30,18 @@ function SignUp() {
   };
 
   return (
-    <div className="flex min-h-[75vh] items-center justify-center px-4 py-12">
-      <form onSubmit={handleSubmit} className="glass-card w-full max-w-md p-8">
-        <h2 className="mb-6 text-3xl font-bold text-white">Sign Up</h2>
+    <div className="flex min-h-[70vh] items-center justify-center px-6 py-12">
+      <form onSubmit={handleSubmit} className="w-full max-w-sm">
+        <h2 className="mb-8 text-body font-medium text-ink-100">Sign Up</h2>
 
         {error && (
-          <p className="mb-4 rounded-lg border border-pop-500/40 bg-pop-500/20 px-3 py-2 text-sm text-pop-400">
+          <p className="mb-5 text-small text-ink-300">
             {error}
           </p>
         )}
 
         <div className="mb-4">
-          <label className="mb-1.5 block text-sm font-medium text-white/80">
+          <label className="mb-2 block text-micro uppercase tracking-[0.14em] text-ink-400">
             Email
           </label>
           <input
@@ -52,12 +52,12 @@ function SignUp() {
             placeholder="you@example.com"
             autoComplete="email"
             required
-            className="w-full rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-white placeholder-white/50 outline-none transition focus:border-sky-300 focus:bg-white/15 focus:ring-2 focus:ring-sky-300/40"
+            className="w-full rounded-[14px] bg-white/[0.05] px-4 py-2.5 text-small text-ink-100 placeholder-ink-500 outline-none transition-colors focus:bg-white/[0.08]"
           />
         </div>
 
         <div className="mb-6">
-          <label className="mb-1.5 block text-sm font-medium text-white/80">
+          <label className="mb-2 block text-micro uppercase tracking-[0.14em] text-ink-400">
             Password
           </label>
           <input
@@ -68,22 +68,22 @@ function SignUp() {
             placeholder="••••••••"
             autoComplete="new-password"
             required
-            className="w-full rounded-xl border border-white/25 bg-white/10 px-4 py-2.5 text-white placeholder-white/50 outline-none transition focus:border-sky-300 focus:bg-white/15 focus:ring-2 focus:ring-sky-300/40"
+            className="w-full rounded-[14px] bg-white/[0.05] px-4 py-2.5 text-small text-ink-100 placeholder-ink-500 outline-none transition-colors focus:bg-white/[0.08]"
           />
         </div>
 
         <button
           type="submit"
-          className="w-full rounded-xl bg-gradient-to-r from-sky-500 to-pop-500 px-4 py-2.5 font-semibold text-white transition hover:opacity-90 active:scale-[0.99]"
+          className="w-full rounded-[14px] bg-ink-100 px-4 py-2.5 text-small font-medium text-ink-900 transition-opacity hover:opacity-85 active:scale-[0.99]"
         >
           Sign Up
         </button>
 
-        <p className="mt-4 text-center text-sm text-white/70">
+        <p className="mt-6 text-center text-small text-ink-400">
           Already have an account?{" "}
           <Link
             to="/login"
-            className="font-medium text-sky-300 hover:text-sky-200"
+            className="text-ink-100 underline underline-offset-4 transition-colors hover:text-white"
           >
             Login
           </Link>
