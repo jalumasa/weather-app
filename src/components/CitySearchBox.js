@@ -36,16 +36,21 @@ function CitySearchBox({ value, onChange, onSelect, onSubmit }) {
   const containerRef = useRef(null);
   const debounceRef = useRef(null);
   const requestIdRef = useRef(0);
-  // Set right before onSelect writes the picked label back into `value`, so
-  // that write doesn't get treated as a fresh keystroke and re-query itself
-  // right back open.
-  const suppressNextSearchRef = useRef(false);
+  // Only typing should open the dropdown. `value` also changes when something
+  // else writes to the box - picking a suggestion puts its label back, and
+  // choosing a saved location fills in that city - and none of those are a
+  // query the user is asking us to run.
+  const typedRef = useRef(false);
 
   useEffect(() => {
-    if (suppressNextSearchRef.current) {
-      suppressNextSearchRef.current = false;
+    if (!typedRef.current) {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      setMatches([]);
+      setSearching(false);
+      setOpen(false);
       return undefined;
     }
+    typedRef.current = false;
 
     const query = value.trim();
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -91,7 +96,6 @@ function CitySearchBox({ value, onChange, onSelect, onSubmit }) {
   }, []);
 
   const pickMatch = (match) => {
-    suppressNextSearchRef.current = true;
     setOpen(false);
     setMatches([]);
     onSelect(match, describeMatch(match).full);
@@ -134,7 +138,10 @@ function CitySearchBox({ value, onChange, onSelect, onSubmit }) {
           aria-expanded={open && matches.length > 0}
           aria-controls="city-search-listbox"
           aria-autocomplete="list"
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            typedRef.current = true;
+            onChange(e.target.value);
+          }}
           onFocus={() => matches.length > 0 && setOpen(true)}
           onKeyDown={handleKeyDown}
           className="w-full rounded-[9999px] bg-white/[0.05] px-4 py-2 text-small text-ink-100 placeholder-ink-500 outline-none transition-colors focus:bg-white/[0.08]"
