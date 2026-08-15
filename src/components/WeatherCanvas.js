@@ -142,11 +142,11 @@ function drawBlob(ctx, x, y, radius, alpha, tint) {
 }
 
 // A jagged bolt built by walking downward with random horizontal jitter.
-function drawLightningBolt(ctx, startX, height) {
+function drawLightningBolt(ctx, startX, height, palette) {
   ctx.save();
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.85)";
+  ctx.strokeStyle = `rgba(${palette.bolt}, 0.85)`;
   ctx.lineWidth = 2;
-  ctx.shadowColor = "rgba(190, 220, 255, 0.9)";
+  ctx.shadowColor = `rgba(${palette.boltGlow}, 0.9)`;
   ctx.shadowBlur = 18;
   ctx.beginPath();
   ctx.moveTo(startX, 0);
@@ -179,9 +179,43 @@ const SCENE_WASH = {
   sun: "150, 116, 66",
 };
 
-function WeatherCanvas({ condition, timeOfDay }) {
+/*
+  Every mark is drawn from the palette rather than a literal colour, because
+  the whole scene has to invert: white rain is invisible on paper, and a
+  storm that flashes *brighter* than the page reads as nothing at all - in
+  light mode the flash darkens instead, like a cloud passing over.
+*/
+const PALETTE = {
+  dark: {
+    particle: "255, 255, 255",
+    mote: "240, 238, 232",
+    sunGlow: "236, 214, 178",
+    flash: "226, 236, 255",
+    flashAlpha: 0.32,
+    bolt: "255, 255, 255",
+    boltGlow: "190, 220, 255",
+    alphaScale: 1,
+    washStops: [0.3, 0.09],
+  },
+  light: {
+    particle: "56, 64, 80",
+    mote: "138, 130, 114",
+    sunGlow: "214, 170, 92",
+    flash: "38, 46, 68",
+    flashAlpha: 0.16,
+    bolt: "58, 68, 96",
+    boltGlow: "120, 140, 190",
+    // Dark marks on paper carry further than light marks on black.
+    alphaScale: 0.72,
+    washStops: [0.15, 0.05],
+  },
+};
+
+function WeatherCanvas({ condition, timeOfDay, theme = "dark" }) {
   const canvasRef = useRef(null);
   const sceneRef = useRef(resolveScene(condition, timeOfDay));
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
 
   // Keep the scene in a ref so a condition change doesn't tear down and
   // restart the animation loop - the loop just starts drawing something else.
@@ -232,6 +266,8 @@ function WeatherCanvas({ condition, timeOfDay }) {
 
       ctx.clearRect(0, 0, width, height);
 
+      const palette = PALETTE[themeRef.current] || PALETTE.dark;
+
       // Condition wash, painted first so particles sit on top of it.
       const wash = SCENE_WASH[activeScene];
       if (wash) {
@@ -243,8 +279,8 @@ function WeatherCanvas({ condition, timeOfDay }) {
           height * 1.02,
           Math.max(width, height) * 0.95
         );
-        pool.addColorStop(0, `rgba(${wash}, 0.30)`);
-        pool.addColorStop(0.55, `rgba(${wash}, 0.09)`);
+        pool.addColorStop(0, `rgba(${wash}, ${palette.washStops[0]})`);
+        pool.addColorStop(0.55, `rgba(${wash}, ${palette.washStops[1]})`);
         pool.addColorStop(1, `rgba(${wash}, 0)`);
         ctx.fillStyle = pool;
         ctx.fillRect(0, 0, width, height);
@@ -255,7 +291,7 @@ function WeatherCanvas({ condition, timeOfDay }) {
         case "storm": {
           ctx.lineCap = "round";
           particles.forEach((drop) => {
-            ctx.strokeStyle = `rgba(255, 255, 255, ${drop.alpha})`;
+            ctx.strokeStyle = `rgba(${palette.particle}, ${drop.alpha * palette.alphaScale})`;
             ctx.lineWidth = drop.width;
             ctx.beginPath();
             ctx.moveTo(drop.x, drop.y);
@@ -278,9 +314,9 @@ function WeatherCanvas({ condition, timeOfDay }) {
               nextStrike = elapsed + random(2600, 7000);
             }
             if (flash > 0) {
-              ctx.fillStyle = `rgba(226, 236, 255, ${flash * 0.32})`;
+              ctx.fillStyle = `rgba(${palette.flash}, ${flash * palette.flashAlpha})`;
               ctx.fillRect(0, 0, width, height);
-              if (flash > 0.55) drawLightningBolt(ctx, boltX, height);
+              if (flash > 0.55) drawLightningBolt(ctx, boltX, height, palette);
               flash -= 0.045;
             }
           }
@@ -290,7 +326,7 @@ function WeatherCanvas({ condition, timeOfDay }) {
         case "snow": {
           particles.forEach((flake) => {
             const x = flake.x + Math.sin(seconds * flake.sway + flake.phase) * flake.drift;
-            ctx.fillStyle = `rgba(255, 255, 255, ${flake.alpha})`;
+            ctx.fillStyle = `rgba(${palette.particle}, ${flake.alpha * palette.alphaScale})`;
             ctx.beginPath();
             ctx.arc(x, flake.y, flake.radius, 0, Math.PI * 2);
             ctx.fill();
@@ -307,7 +343,7 @@ function WeatherCanvas({ condition, timeOfDay }) {
         case "stars": {
           particles.forEach((star) => {
             const twinkle = 0.55 + 0.45 * Math.sin(seconds * star.twinkle + star.phase);
-            ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha * twinkle})`;
+            ctx.fillStyle = `rgba(${palette.particle}, ${star.alpha * twinkle * palette.alphaScale})`;
             ctx.beginPath();
             ctx.arc(star.x, star.y, star.radius, 0, Math.PI * 2);
             ctx.fill();
@@ -325,8 +361,8 @@ function WeatherCanvas({ condition, timeOfDay }) {
             const gradient = ctx.createLinearGradient(
               streakX, streakY, streakX - trail, streakY - trail * 0.55
             );
-            gradient.addColorStop(0, `rgba(255, 255, 255, ${0.9 * (1 - t)})`);
-            gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+            gradient.addColorStop(0, `rgba(${palette.particle}, ${0.9 * (1 - t) * palette.alphaScale})`);
+            gradient.addColorStop(1, `rgba(${palette.particle}, 0)`);
             ctx.strokeStyle = gradient;
             ctx.lineWidth = 2;
             ctx.beginPath();
@@ -344,11 +380,11 @@ function WeatherCanvas({ condition, timeOfDay }) {
           drawBlob(
             ctx, width * 0.82, height * 0.08,
             Math.min(width, height) * 0.55,
-            0.05 + pulse * 0.03, "236, 214, 178"
+            0.05 + pulse * 0.03, palette.sunGlow
           );
 
           particles.forEach((mote) => {
-            ctx.fillStyle = `rgba(240, 238, 232, ${mote.alpha * 0.7})`;
+            ctx.fillStyle = `rgba(${palette.mote}, ${mote.alpha * 0.7 * palette.alphaScale})`;
             ctx.beginPath();
             ctx.arc(mote.x, mote.y, mote.radius, 0, Math.PI * 2);
             ctx.fill();
@@ -368,7 +404,7 @@ function WeatherCanvas({ condition, timeOfDay }) {
         case "clouds":
         case "fog": {
           particles.forEach((cloud) => {
-            drawBlob(ctx, cloud.x, cloud.y, cloud.radius, cloud.alpha, "255, 255, 255");
+            drawBlob(ctx, cloud.x, cloud.y, cloud.radius, cloud.alpha * palette.alphaScale, palette.particle);
             cloud.x += cloud.speed;
             if (cloud.x - cloud.radius > width) {
               cloud.x = -cloud.radius;

@@ -4,21 +4,13 @@ import axios from "axios";
 import { useLocation as useReactRouterLocation } from "react-router-dom";
 import { toast } from "react-hot-toast";
 import { useAuth } from "../contexts/AuthContext.js";
+import { useTheme } from "../contexts/ThemeContext.js";
 import WeatherIcon from "../weatherIcon.js";
-import {
-  LineChart,
-  Line,
-  YAxis,
-  XAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
 import "../assets/css/mainPage.css";
-import "../assets/css/graph.css";
 import WeatherCanvas from "../components/WeatherCanvas.js";
 import useCountUp from "../hooks/useCountUp.js";
 import CitySearchBox from "../components/CitySearchBox.js";
+import ConditionsGrid from "../components/ConditionsGrid.js";
 
 // Used when geolocation is denied or unavailable, so the app still has
 // something to show instead of getting stuck on "Failed to fetch weather data".
@@ -66,6 +58,103 @@ const shiftDateKey = (dateKey, days) => {
   shifted.setUTCDate(shifted.getUTCDate() + days);
   return cityDateKey(shifted);
 };
+
+// Where "now" sits between sunrise and sunset, 0..1, for the sun arc.
+const sunPosition = (now, sunrise, sunset) => {
+  if (!now || !sunrise || !sunset || sunset <= sunrise) return 0;
+  return Math.min(1, Math.max(0, (now - sunrise) / (sunset - sunrise)));
+};
+
+const COMPASS = [
+  "N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+  "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
+];
+
+const compassPoint = (degrees) =>
+  COMPASS[Math.round((degrees % 360) / 22.5) % 16];
+
+/*
+  Everything the conditions grid shows, derived in one place from responses
+  both fetch paths already have. Only the UV call is extra.
+
+  Kept at module scope for the same reason as the date helpers: the two fetch
+  paths run this pipeline in duplicate, and every bug that's been fixed in one
+  and missed in the other started as logic living inside them.
+*/
+function buildMetrics({ current, forecastList, uv, units }) {
+  const imperial = units === "imperial";
+  const next24h = (forecastList || []).slice(0, 8);
+
+  // OpenWeatherMap reports metric wind in m/s, not km/h - the label has been
+  // saying Km/h over an m/s number, under-reporting by a factor of 3.6.
+  const toWindUnit = (value) =>
+    value == null ? null : imperial ? value : value * 3.6;
+
+  /*
+    The current reading usually omits gusts - OpenWeatherMap only sends the
+    field when there's something to report. Falling back to the first forecast
+    slot produced nonsense: a gust from three hours away, printed next to the
+    wind right now, and sometimes *lower* than it, which a gust can never be.
+
+    Taking the strongest across now and the next day is both truthful and
+    always >= the sustained wind, so the pair can't contradict itself.
+  */
+  const gustCandidates = [
+    current.wind?.gust,
+    current.wind?.speed,
+    ...next24h.map((slot) => slot.wind?.gust),
+  ].filter((value) => typeof value === "number");
+  const gustSource = gustCandidates.length ? Math.max(...gustCandidates) : null;
+
+  // Chance of rain is the worst it gets over the next day, not an average -
+  // "40% at some point" is the thing worth planning around.
+  const pop = next24h.length
+    ? Math.max(...next24h.map((slot) => slot.pop || 0))
+    : null;
+
+  const rainVolume = next24h.reduce(
+    (total, slot) => total + (slot.rain?.["3h"] || 0) + (slot.snow?.["3h"] || 0),
+    0
+  );
+
+  const daylightSeconds =
+    current.sys?.sunset && current.sys?.sunrise
+      ? current.sys.sunset - current.sys.sunrise
+      : null;
+
+  return {
+    feelsLike: current.main?.feels_like ?? null,
+    windSpeed: toWindUnit(current.wind?.speed),
+    windGust: toWindUnit(gustSource),
+    windDeg: current.wind?.deg ?? null,
+    windPoint: current.wind?.deg == null ? null : compassPoint(current.wind.deg),
+    humidity: current.main?.humidity ?? null,
+    dewPoint: next24h[0]?.main?.dew_point ?? null,
+    pressure: imperial
+      ? (current.main?.pressure ?? 0) * 0.02953
+      : current.main?.pressure ?? null,
+    pressureUnit: imperial ? "inHg" : "hPa",
+    visibility:
+      current.visibility == null
+        ? null
+        : imperial
+        ? current.visibility / 1609.34
+        : current.visibility / 1000,
+    visibilityUnit: imperial ? "mi" : "km",
+    cloudCover: current.clouds?.all ?? null,
+    pop: pop == null ? null : Math.round(pop * 100),
+    precipitation: imperial ? rainVolume / 25.4 : rainVolume,
+    precipitationUnit: imperial ? "in" : "mm",
+    uvNow: uv?.now ?? null,
+    uvMax: uv?.max ?? null,
+    daylight:
+      daylightSeconds == null
+        ? null
+        : `${Math.floor(daylightSeconds / 3600)}h ${Math.round(
+            (daylightSeconds % 3600) / 60
+          )}m`,
+  };
+}
 
 /*
   Temperature ramp for the 7-day range bars. This is the one place colour is
@@ -119,13 +208,14 @@ function Home({ weatherMain }) {
     latitude: "",
     longitude: "",
   });
-  const [weeklyData, setWeeklyData] = useState([]);
-  const [dataKey, setDataKey] = useState("Temperature");
   const [units, setUnits] = useState("metric");
   const [unitName, setUnitName] = useState({ temp: "C", speed: "Km/h" });
   const { currentUser } = useAuth();
+  const { theme } = useTheme();
   const [clickedFavourites, setClickedFavourites] = useState(false);
   const [times, setTimes] = useState([]);
+  const [metrics, setMetrics] = useState(null);
+  const [sunProgress, setSunProgress] = useState(0);
   const reactRouterLocation = useReactRouterLocation();
 
   //Fetch + process weather/forecast/timezone for a given city name, then
@@ -178,6 +268,29 @@ function Home({ weatherMain }) {
         );
         const sunset = cityTimeLabel(
           cityClock(currentResponse.sys.sunset, cityOffset)
+        );
+
+        // UV is the one reading OpenWeatherMap's tier doesn't carry; a failure
+        // here should cost us that tile, not the whole dashboard.
+        const uv = await axios
+          .get(`/uv?lat=${latitude}&lon=${longitude}`)
+          .then((r) => r.data)
+          .catch(() => null);
+
+        setMetrics(
+          buildMetrics({
+            current: currentResponse,
+            forecastList: forecastWeatherResponse.data.list,
+            uv,
+            units,
+          })
+        );
+        setSunProgress(
+          sunPosition(
+            currentResponse.dt,
+            currentResponse.sys.sunrise,
+            currentResponse.sys.sunset
+          )
         );
 
         const description =
@@ -256,19 +369,6 @@ function Home({ weatherMain }) {
             // daytime glyph (this used to be derived from a hardcoded date).
             const timeOfDay = "day";
             const dayForecasts = groupedData[date];
-            const total = dayForecasts.reduce(
-              (acc, forecast) => {
-                acc.temp += forecast.main.temp;
-                acc.wind += forecast.wind.speed;
-                acc.humidity += forecast.main.humidity;
-                return acc;
-              },
-              { temp: 0, wind: 0, humidity: 0 }
-            );
-
-            const averageTemp = total.temp / dayForecasts.length;
-            const averageHumidity = total.humidity / dayForecasts.length;
-            const averageWind = total.wind / dayForecasts.length;
             const minTemp = Math.min(
               ...dayForecasts.map((f) => f.main.temp_min)
             );
@@ -301,9 +401,6 @@ function Home({ weatherMain }) {
                   timeOfDay={timeOfDay}
                 />
               ),
-              averageTemp: averageTemp.toFixed(1),
-              averageWind: averageWind.toFixed(1),
-              averageHumidity: averageHumidity.toFixed(1),
               minTemp,
               maxTemp,
               description: description,
@@ -416,19 +513,6 @@ function Home({ weatherMain }) {
             // daytime glyph (this used to be derived from a hardcoded date).
             const timeOfDay = "day";
             const dayForecasts = groupedData[date];
-            const total = dayForecasts.reduce(
-              (acc, forecast) => {
-                acc.temp += forecast.main.temp;
-                acc.wind += forecast.wind.speed;
-                acc.humidity += forecast.main.humidity;
-                return acc;
-              },
-              { temp: 0, wind: 0, humidity: 0 }
-            );
-
-            const averageTemp = total.temp / dayForecasts.length;
-            const averageHumidity = total.humidity / dayForecasts.length;
-            const averageWind = total.wind / dayForecasts.length;
             const minTemp = Math.min(
               ...dayForecasts.map((f) => f.main.temp_min)
             );
@@ -461,9 +545,6 @@ function Home({ weatherMain }) {
                   timeOfDay={timeOfDay}
                 />
               ),
-              averageTemp: averageTemp.toFixed(1),
-              averageWind: averageWind.toFixed(1),
-              averageHumidity: averageHumidity.toFixed(1),
               minTemp,
               maxTemp,
               description: description,
@@ -481,6 +562,27 @@ function Home({ weatherMain }) {
         );
         const sunset = cityTimeLabel(
           cityClock(response.data.sys.sunset, cityOffset)
+        );
+
+        const uv = await axios
+          .get(`/uv?lat=${lat}&lon=${long}`)
+          .then((r) => r.data)
+          .catch(() => null);
+
+        setMetrics(
+          buildMetrics({
+            current: response.data,
+            forecastList: response2.data.list,
+            uv,
+            units,
+          })
+        );
+        setSunProgress(
+          sunPosition(
+            response.data.dt,
+            response.data.sys.sunrise,
+            response.data.sys.sunset
+          )
         );
 
         const description =
@@ -525,43 +627,6 @@ function Home({ weatherMain }) {
     [units]
   );
 
-  //the Line Graph for visualization
-  const weeklyGraph = useCallback(
-    (action) => {
-      let key;
-      if (action === "temp") {
-        key = "Temperature";
-      } else if (action === "humidity") {
-        key = "Humidity";
-      } else if (action === "wind") {
-        key = "Wind";
-      }
-
-      if (!Array.isArray(data2) || data2.length === 0) {
-        console.error("Data is not an array or is empty");
-        return;
-      }
-
-      const weekWeather = data2.map((dayData) => ({
-        day: dayData.day,
-        temp: dayData.averageTemp,
-        wind: dayData.averageWind,
-        humidity: dayData.averageHumidity,
-      }));
-
-      const updatedWeeklyWeatherData = weekWeather.map((dayData) => ({
-        name: dayData.day,
-        Temperature: dayData.temp,
-        Humidity: dayData.humidity,
-        Wind: dayData.wind,
-      }));
-
-      setWeeklyData(updatedWeeklyWeatherData);
-      setDataKey(key);
-    },
-    [data2]
-  );
-
   //Read ?city= from the URL, or fall back to geolocation (and if that's
   //denied or unavailable, fall back further to a default city).
   useEffect(() => {
@@ -601,19 +666,25 @@ function Home({ weatherMain }) {
   }, [location, units, fetchWeatherData]);
 
   useEffect(() => {
-    if (currentUser) {
-      axios
-        .get(`/favourites?userId=${currentUser.uid}`)
-        .then((result) => {
-          const sortedFavourites = result.data.sort((a, b) => {
-            return a.name.localeCompare(b.name);
-          });
-          setFavourites(sortedFavourites);
-        })
-        .catch((err) => {
-          console.log(err);
-        });
+    // Signing out has to clear the list, not just stop fetching it. Leaving it
+    // behind kept the bookmark showing "saved" for a signed-out visitor, and
+    // left one account's locations readable by whoever used the browser next.
+    if (!currentUser) {
+      setFavourites([]);
+      return;
     }
+
+    axios
+      .get(`/favourites?userId=${currentUser.uid}`)
+      .then((result) => {
+        const sortedFavourites = result.data.sort((a, b) => {
+          return a.name.localeCompare(b.name);
+        });
+        setFavourites(sortedFavourites);
+      })
+      .catch((err) => {
+        console.log(err);
+      });
   }, [currentUser]);
 
   useEffect(() => {
@@ -633,25 +704,6 @@ function Home({ weatherMain }) {
   const imperial = () => {
     setUnits("imperial");
     setUnitName({ temp: "F", speed: "Mph" });
-  };
-
-  useEffect(() => {
-    if (data2.length > 0) {
-      weeklyGraph("temp");
-    }
-  }, [data2, weeklyGraph]);
-
-  //function to display the condition names
-  const dataKeyName = (dataKey) => {
-    let conditionName = "";
-    if (dataKey === "Temperature") {
-      conditionName = `Temperature (°${unitName.temp})`;
-    } else if (dataKey === "Humidity") {
-      conditionName = "Humidity (%)";
-    } else {
-      conditionName = `Wind (${unitName.speed})`;
-    }
-    return conditionName;
   };
 
   //Adding a favourite city to the db
@@ -729,7 +781,11 @@ function Home({ weatherMain }) {
       )}
 
       {/* Live condition-driven background: rain, snow, stars, lightning. */}
-      <WeatherCanvas condition={data.condition} timeOfDay={data.timeOfDay} />
+      <WeatherCanvas
+        condition={data.condition}
+        timeOfDay={data.timeOfDay}
+        theme={theme}
+      />
 
       <div className="relative z-10 mx-auto max-w-2xl px-6 pb-24">
         {/*
@@ -892,7 +948,7 @@ function Home({ weatherMain }) {
                   return (
                     <div
                       key={index}
-                      className="flex items-center gap-3 border-t border-white/[0.05] py-3.5 first:border-t-0 sm:gap-4"
+                      className="flex items-center gap-3 border-t border-[var(--hairline)] py-3.5 first:border-t-0 sm:gap-4"
                     >
                       <span className="w-[4.5rem] shrink-0 truncate text-small text-ink-300 sm:w-24">
                         {forecast.day}
@@ -903,7 +959,7 @@ function Home({ weatherMain }) {
                       <span className="tnum w-9 shrink-0 text-right text-small text-ink-400">
                         {Math.round(forecast.minTemp)}°
                       </span>
-                      <div className="relative h-[5px] flex-1 rounded-[9999px] bg-white/[0.06]">
+                      <div className="relative h-[5px] flex-1 rounded-[9999px] bg-[var(--track)]">
                         <div
                           className="absolute h-[5px] rounded-[9999px]"
                           style={{
@@ -933,114 +989,14 @@ function Home({ weatherMain }) {
               <h2 className="mb-5 text-micro uppercase tracking-[0.18em] text-ink-400">
                 Conditions
               </h2>
-              <div className="panel grid grid-cols-2 sm:grid-cols-4">
-                {[
-                  { label: "Humidity", value: `${data.humidity}%` },
-                  {
-                    label: "Wind",
-                    value: `${Math.round(data.speed)} ${unitName.speed}`,
-                  },
-                  { label: "Sunrise", value: data.sunrise },
-                  { label: "Sunset", value: data.sunset },
-                ].map((stat) => (
-                  <div
-                    key={stat.label}
-                    className="border-b border-white/[0.05] px-5 py-5 sm:border-b-0 sm:border-r sm:last:border-r-0 [&:nth-child(n+3)]:border-b-0"
-                  >
-                    <p className="text-micro uppercase tracking-[0.14em] text-ink-400">
-                      {stat.label}
-                    </p>
-                    <p className="tnum mt-2 text-xl font-light text-ink-100">
-                      {stat.value}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              <ConditionsGrid
+                metrics={metrics}
+                data={data}
+                unitName={unitName}
+                sunProgress={sunProgress}
+              />
             </section>
 
-            {/* Trend */}
-            <section
-              className="animate-rise mt-14"
-              style={{ animationDelay: "0.32s" }}
-            >
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-micro uppercase tracking-[0.18em] text-ink-400">
-                  {dataKeyName(dataKey)}
-                </h2>
-                <div className="flex gap-0.5">
-                  <button
-                    onClick={() => weeklyGraph("temp")}
-                    className={pillClasses(dataKey === "Temperature")}
-                  >
-                    Temp
-                  </button>
-                  <button
-                    onClick={() => weeklyGraph("humidity")}
-                    className={pillClasses(dataKey === "Humidity")}
-                  >
-                    Humidity
-                  </button>
-                  <button
-                    onClick={() => weeklyGraph("wind")}
-                    className={pillClasses(dataKey === "Wind")}
-                  >
-                    Wind
-                  </button>
-                </div>
-              </div>
-
-              <div className="panel py-6 pr-5">
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart
-                    data={weeklyData}
-                    margin={{ top: 5, right: 5, left: 0, bottom: 0 }}
-                  >
-                    <CartesianGrid
-                      vertical={false}
-                      stroke="rgba(255,255,255,0.05)"
-                    />
-                    <XAxis
-                      dataKey="name"
-                      tickLine={false}
-                      axisLine={false}
-                      tick={{ fontSize: 11 }}
-                    />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      width={38}
-                      tick={{ fontSize: 11 }}
-                      // Fit the axis to the data instead of anchoring at zero;
-                      // a week of 28-29C against a 0-32 axis renders as a flat
-                      // line and hides the shape entirely.
-                      domain={[
-                        (min) => Math.floor(min - 2),
-                        (max) => Math.ceil(max + 2),
-                      ]}
-                      allowDecimals={false}
-                    />
-                    <Tooltip
-                      cursor={{ stroke: "rgba(255,255,255,0.15)" }}
-                      contentStyle={{
-                        backgroundColor: "#161616",
-                        border: "none",
-                        borderRadius: "12px",
-                        color: "#e4e4e7",
-                        fontSize: "0.8125rem",
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey={dataKey}
-                      stroke="#e4e4e7"
-                      strokeWidth={1.5}
-                      dot={false}
-                      activeDot={{ r: 3, fill: "#e4e4e7" }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </section>
           </>
         )}
       </div>

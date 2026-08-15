@@ -19,13 +19,13 @@
 
 .forecast-container::-webkit-scrollbar-thumb,
 .forecast-container2::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.09);
+  background-color: var(--scrollbar);
   border-radius: 999px;
 }
 
 .forecast-container::-webkit-scrollbar-thumb:hover,
 .forecast-container2::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(255, 255, 255, 0.18);
+  background-color: var(--scrollbar-hover);
 }
 
 /* Weather glyph sizing (see weatherIcon.js). The icons are stroked SVGs that
@@ -36,12 +36,12 @@
   width: 104px;
   height: 104px;
   stroke-width: 0.5;
-  color: rgb(228, 228, 231);
+  color: var(--color-ink-100);
 }
 
 .day-forecast svg,
 .week-forecast svg {
   width: 26px;
   height: 26px;
-  color: rgb(180, 180, 180);
+  color: var(--color-ink-200);
 }

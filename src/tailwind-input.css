@@ -33,6 +33,67 @@
   --text-body: 0.9375rem;
 }
 
+/*
+  Theming.
+
+  Tailwind v4 compiles every utility down to var(--color-ink-*), so redefining
+  those variables under [data-theme="light"] repaints the whole interface -
+  no dark: variants scattered through the markup.
+
+  The translucent surfaces can't work that way: a 4% white overlay that reads
+  as "raised" on near-black is invisible on paper. They're named by role
+  instead, and each theme decides its own direction - raised surfaces go
+  lighter, interactive states go darker, which is how light themes actually
+  behave.
+*/
+:root {
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-raised: rgba(255, 255, 255, 0.06);
+  --state-hover: rgba(255, 255, 255, 0.06);
+  --state-active: rgba(255, 255, 255, 0.1);
+  --hairline: rgba(255, 255, 255, 0.05);
+  --field: rgba(255, 255, 255, 0.05);
+  --track: rgba(255, 255, 255, 0.06);
+  --scrollbar: rgba(255, 255, 255, 0.09);
+  --scrollbar-hover: rgba(255, 255, 255, 0.18);
+  --contrast: #ffffff;
+  --grid-line: rgba(255, 255, 255, 0.05);
+  --cursor-line: rgba(255, 255, 255, 0.15);
+  --overlay: #161616;
+  --overlay-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
+}
+
+:root[data-theme="light"] {
+  /* The ramp inverts: ink-900 is still the stage, it's just paper now, and
+     ink-100 is still the loudest text, now near-black. */
+  --color-ink-950: #ffffff;
+  --color-ink-900: #f2f2f3;
+  --color-ink-850: #ededee;
+  --color-ink-800: #e6e6e8;
+  --color-ink-700: #d7d7da;
+  --color-ink-600: #c3c3c7;
+  --color-ink-500: #a2a2a7;
+  --color-ink-400: #6b6b70;
+  --color-ink-300: #55555a;
+  --color-ink-200: #333338;
+  --color-ink-100: #18181b;
+
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --state-hover: rgba(0, 0, 0, 0.05);
+  --state-active: rgba(0, 0, 0, 0.08);
+  --hairline: rgba(0, 0, 0, 0.07);
+  --field: rgba(0, 0, 0, 0.04);
+  --track: rgba(0, 0, 0, 0.07);
+  --scrollbar: rgba(0, 0, 0, 0.12);
+  --scrollbar-hover: rgba(0, 0, 0, 0.22);
+  --contrast: #000000;
+  --grid-line: rgba(0, 0, 0, 0.07);
+  --cursor-line: rgba(0, 0, 0, 0.18);
+  --overlay: #ffffff;
+  --overlay-shadow: 0 16px 40px rgba(0, 0, 0, 0.13);
+}
+
 @layer base {
   body {
     margin: 0;
@@ -64,12 +125,25 @@
     biggest tell of the glassmorphism look we're moving away from.
   */
   .panel {
-    @apply rounded-[28px] bg-white/[0.04];
+    @apply rounded-[28px];
+    background-color: var(--surface);
   }
 
   /* Slightly brighter surface for things sitting on top of a panel. */
   .panel-raised {
-    @apply rounded-[20px] bg-white/[0.06];
+    @apply rounded-[20px];
+    background-color: var(--surface-raised);
+  }
+
+  /*
+    Floating surface, used by the search results. Opaque in both themes on
+    purpose: it sits over live content, and letting that ghost through made
+    the list hard to read.
+  */
+  .overlay-panel {
+    @apply rounded-[20px];
+    background-color: var(--overlay);
+    box-shadow: var(--overlay-shadow);
   }
 
   /* Pill control, the one interactive shape used throughout. */
@@ -78,16 +152,20 @@
   }
 
   .pill:hover {
-    @apply bg-white/[0.06] text-ink-100;
+    @apply text-ink-100;
+    background-color: var(--state-hover);
   }
 
   .pill-active {
-    @apply bg-white/[0.10] text-ink-100;
+    @apply text-ink-100;
+    background-color: var(--state-active);
   }
 
   /* Ring spinner shown while a weather fetch is in flight. */
   .spinner-ring {
-    @apply h-8 w-8 rounded-[9999px] border-2 border-white/10 border-t-white/70;
+    @apply h-8 w-8 rounded-[9999px] border-2;
+    border-color: var(--track);
+    border-top-color: var(--color-ink-200);
     animation: spin 0.7s linear infinite;
   }
 

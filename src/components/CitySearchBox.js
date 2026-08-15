@@ -144,12 +144,12 @@ function CitySearchBox({ value, onChange, onSelect, onSubmit }) {
           }}
           onFocus={() => matches.length > 0 && setOpen(true)}
           onKeyDown={handleKeyDown}
-          className="w-full rounded-[9999px] bg-white/[0.05] px-4 py-2 text-small text-ink-100 placeholder-ink-500 outline-none transition-colors focus:bg-white/[0.08]"
+          className="w-full rounded-[9999px] bg-[var(--field)] px-4 py-2 text-small text-ink-100 placeholder-ink-500 outline-none transition-colors focus:bg-[var(--state-active)]"
         />
 
         {searching && (
           <div className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2">
-            <div className="h-3 w-3 animate-spin rounded-[9999px] border border-white/15 border-t-white/60" />
+            <div className="h-3 w-3 animate-spin rounded-[9999px] border border-[var(--track)] border-t-[var(--color-ink-200)]" />
           </div>
         )}
 
@@ -160,7 +160,7 @@ function CitySearchBox({ value, onChange, onSelect, onSubmit }) {
             // Opaque rather than a translucent panel: this floats over live
             // content, and letting that content ghost through made the list
             // hard to read.
-            className="animate-rise absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-64 overflow-y-auto rounded-[20px] bg-ink-800 p-1.5 text-left shadow-2xl shadow-black/60"
+            className="overlay-panel animate-rise absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 max-h-64 overflow-y-auto p-1.5 text-left"
           >
             {matches.map((match, index) => {
               const { primary, secondary } = describeMatch(match);
@@ -173,7 +173,7 @@ function CitySearchBox({ value, onChange, onSelect, onSubmit }) {
                     onClick={() => pickMatch(match)}
                     onMouseEnter={() => setHighlighted(index)}
                     className={`flex w-full items-baseline gap-2 rounded-[14px] px-3 py-2 text-left text-small transition-colors ${
-                      isActive ? "bg-white/[0.07]" : ""
+                      isActive ? "bg-[var(--state-hover)]" : ""
                     }`}
                   >
                     <span className="shrink-0 text-ink-100">{primary}</span>
@@ -191,7 +191,7 @@ function CitySearchBox({ value, onChange, onSelect, onSubmit }) {
       <button
         onClick={onSubmit}
         aria-label="Search"
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9999px] bg-white/[0.05] text-ink-300 transition-colors hover:bg-white/[0.09] hover:text-ink-100"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9999px] bg-[var(--field)] text-ink-300 transition-colors hover:bg-[var(--state-active)] hover:text-ink-100"
       >
         <i className="material-icons text-base">search</i>
       </button>

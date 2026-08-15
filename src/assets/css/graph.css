@@ -1,6 +1,0 @@
-/* recharts renders its own internal SVG text, which needs a plain CSS
-   override rather than Tailwind classes to reach it. */
-.recharts-cartesian-axis-tick,
-.recharts-cartesian-axis-label {
-  fill: rgba(255, 255, 255, 0.6);
-}

@@ -52,7 +52,7 @@ function Login() {
             placeholder="you@example.com"
             autoComplete="email"
             required
-            className="w-full rounded-[14px] bg-white/[0.05] px-4 py-2.5 text-small text-ink-100 placeholder-ink-500 outline-none transition-colors focus:bg-white/[0.08]"
+            className="w-full rounded-[14px] bg-[var(--field)] px-4 py-2.5 text-small text-ink-100 placeholder-ink-500 outline-none transition-colors focus:bg-[var(--state-active)]"
           />
         </div>
 
@@ -68,7 +68,7 @@ function Login() {
             placeholder="••••••••"
             autoComplete="current-password"
             required
-            className="w-full rounded-[14px] bg-white/[0.05] px-4 py-2.5 text-small text-ink-100 placeholder-ink-500 outline-none transition-colors focus:bg-white/[0.08]"
+            className="w-full rounded-[14px] bg-[var(--field)] px-4 py-2.5 text-small text-ink-100 placeholder-ink-500 outline-none transition-colors focus:bg-[var(--state-active)]"
           />
         </div>
 
@@ -83,7 +83,7 @@ function Login() {
           Don't have an account?{" "}
           <Link
             to="/signup"
-            className="text-ink-100 underline underline-offset-4 transition-colors hover:text-white"
+            className="text-ink-100 underline underline-offset-4 transition-colors hover:text-ink-100"
           >
             Sign Up
           </Link>
