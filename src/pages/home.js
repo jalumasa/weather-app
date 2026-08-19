@@ -218,57 +218,61 @@ function Home({ weatherMain }) {
   const [sunProgress, setSunProgress] = useState(0);
   const reactRouterLocation = useReactRouterLocation();
 
-  //Fetch + process weather/forecast/timezone for a given city name, then
-  //set all the derived state. Shared by the search box and by anything that
-  //navigates to /home?city=<name> (favourites, direct links).
-  const fetchAndSetWeatherByCity = useCallback(
-    async (cityName) => {
-      if (!cityName) return;
+  /*
+    One loader for every way a location can arrive.
+
+    It takes either { city } (typed search, ?city= links, legacy saved rows) or
+    { lat, lon } (geolocation, a picked search result, a saved location) and
+    differs only in which two endpoints it calls - everything after the fetch
+    is identical.
+
+    This used to be two near-identical functions. The same bug had to be found
+    and fixed twice in a row three separate times - day/night from the wrong
+    clock, wind in m/s labelled km/h, sunrise in the viewer's timezone - and
+    each second occurrence was only caught by going looking for it. One body
+    means there is no second place left to forget.
+  */
+  const loadWeather = useCallback(
+    async (query) => {
+      const byName = typeof query.city === "string";
+      if (byName && !query.city) return;
+
+      const suffix = byName
+        ? `name=${encodeURIComponent(query.city)}`
+        : `lat=${query.lat}&lon=${query.lon}`;
+      const currentUrl = `${byName ? "/cityweather" : "/weather"}?${suffix}&units=${units}`;
+      const forecastUrl = `${byName ? "/cityforecast" : "/forecast"}?${suffix}&units=${units}`;
+
       setLoading(true);
-      const apiUrl = `/cityweather?name=${encodeURIComponent(
-        cityName
-      )}&units=${units}`;
-      const apiForecast = `/cityforecast?name=${encodeURIComponent(
-        cityName
-      )}&units=${units}`;
-
       try {
-        const [currentWeatherResponse, forecastWeatherResponse] =
-          await Promise.all([axios.get(apiUrl), axios.get(apiForecast)]);
+        const [currentRes, forecastRes] = await Promise.all([
+          axios.get(currentUrl),
+          axios.get(forecastUrl),
+        ]);
 
-        const currentResponse = currentWeatherResponse.data;
-        const weatherMain = currentResponse.weather[0].main;
-        const weatherDescription = currentResponse.weather[0].description;
+        const current = currentRes.data;
+        const forecast = forecastRes.data;
+        const weatherMain = current.weather[0].main;
+        const weatherDescription = current.weather[0].description;
+        const latitude = current.coord.lat;
+        const longitude = current.coord.lon;
 
-        const latitude = currentResponse.coord.lat;
-        const longitude = currentResponse.coord.lon;
+        /*
+          Everything below is on the *city's* clock, not the viewer's -
+          otherwise looking up Phoenix at 1pm from Nairobi renders a moon and
+          a starfield over a 37C afternoon, and has the sun rising at 3:48pm.
 
-        // Day vs night has to come from the searched city's own clock, not the
-        // viewer's - otherwise looking up Phoenix at 1pm from Nairobi renders a
-        // moon and a starfield over a 37C afternoon.
-        const tzResponse = await axios.get(
-          `/timeZone?lat=${latitude}&lon=${longitude}`
-        );
-        const cityNow = new Date(tzResponse.data.formatted);
-        const cityHour = cityNow.getHours();
-        const timeOfDay = cityHour >= 6 && cityHour < 18 ? "day" : "night";
+          The offset ships with this response. It used to come from a separate
+          timezone API: an extra round trip, an extra key and an extra thing
+          that could fail, for a number we were already holding.
+        */
+        const cityOffset = current.timezone || 0;
+        const cityNow = cityClock(current.dt, cityOffset);
+        const timeOfDay = cityDayOrNight(cityNow);
+        setTimes({ time: cityTimeLabel(cityNow) });
 
-        const timeRefined = cityNow.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        });
-        setTimes({ time: timeRefined });
-
-        // Sunrise/sunset are unix UTC; without shifting by the city's offset
-        // they render in the viewer's zone, which had Phoenix rising at 3:48pm.
-        const cityOffset = currentResponse.timezone || 0;
-        const sunrise = cityTimeLabel(
-          cityClock(currentResponse.sys.sunrise, cityOffset)
-        );
-        const sunset = cityTimeLabel(
-          cityClock(currentResponse.sys.sunset, cityOffset)
-        );
+        const sunrise = cityTimeLabel(cityClock(current.sys.sunrise, cityOffset));
+        const sunset = cityTimeLabel(cityClock(current.sys.sunset, cityOffset));
 
         // UV is the one reading OpenWeatherMap's tier doesn't carry; a failure
         // here should cost us that tile, not the whole dashboard.
@@ -278,30 +282,21 @@ function Home({ weatherMain }) {
           .catch(() => null);
 
         setMetrics(
-          buildMetrics({
-            current: currentResponse,
-            forecastList: forecastWeatherResponse.data.list,
-            uv,
-            units,
-          })
+          buildMetrics({ current, forecastList: forecast.list, uv, units })
         );
         setSunProgress(
-          sunPosition(
-            currentResponse.dt,
-            currentResponse.sys.sunrise,
-            currentResponse.sys.sunset
-          )
+          sunPosition(current.dt, current.sys.sunrise, current.sys.sunset)
         );
 
         const description =
-          currentResponse.weather[0].description.charAt(0).toUpperCase() +
-          currentResponse.weather[0].description.slice(1).toLowerCase();
+          current.weather[0].description.charAt(0).toUpperCase() +
+          current.weather[0].description.slice(1).toLowerCase();
 
         setData({
-          celcius: currentResponse.main.temp,
-          name: currentResponse.name,
-          humidity: currentResponse.main.humidity,
-          speed: currentResponse.wind.speed,
+          celcius: current.main.temp,
+          name: current.name,
+          humidity: current.main.humidity,
+          speed: current.wind.speed,
           image: (
             <WeatherIcon
               weatherMain={weatherMain}
@@ -309,41 +304,46 @@ function Home({ weatherMain }) {
               timeOfDay={timeOfDay}
             />
           ),
-          description: description,
-          country: currentResponse.sys.country,
-          tempMax: currentResponse.main.temp_max,
-          tempMin: currentResponse.main.temp_min,
-          feelsLike: currentResponse.main.feels_like,
-          sunrise: sunrise,
-          sunset: sunset,
-          latitude: currentResponse.coord.lat,
-          longitude: currentResponse.coord.lon,
+          description,
+          country: current.sys.country,
+          tempMax: current.main.temp_max,
+          tempMin: current.main.temp_min,
+          feelsLike: current.main.feels_like,
+          sunrise,
+          sunset,
+          // Saving a location persists these, so it can be re-opened by
+          // coordinate rather than by an ambiguous name.
+          latitude,
+          longitude,
           // Drives the animated background (see components/WeatherCanvas).
           condition: weatherMain,
-          timeOfDay: timeOfDay,
+          timeOfDay,
         });
 
-        const word =
-          cityName.charAt(0).toUpperCase() + cityName.slice(1).toLowerCase();
-        toast.success(word);
+        // Only a deliberate search deserves a confirmation; geolocation and
+        // saved locations load without announcing themselves.
+        if (byName) {
+          toast.success(
+            query.city.charAt(0).toUpperCase() + query.city.slice(1).toLowerCase()
+          );
+        }
 
-        const tzOffset = forecastWeatherResponse.data.city.timezone || 0;
+        const tzOffset = forecast.city.timezone || 0;
         const todayDate = cityDateKey(cityClock(Date.now() / 1000, tzOffset));
         const tomorrowDate = shiftDateKey(todayDate, 1);
-
-        const forecastData = forecastWeatherResponse.data.list.slice(0, 40);
+        const slots = forecast.list.slice(0, 40);
 
         // Hourly strip: a rolling 24 hours (eight 3-hourly slots) rather than
         // "everything left in today", which late in the evening was one or two
         // entries and read as broken.
-        const processedForecastData = forecastData.slice(0, 8).map((forecast) => {
-          const slot = cityClock(forecast.dt, tzOffset);
+        const hourly = slots.slice(0, 8).map((entry) => {
+          const slot = cityClock(entry.dt, tzOffset);
           return {
-            celcius: forecast.main.temp,
+            celcius: entry.main.temp,
             image: (
               <WeatherIcon
-                weatherMain={forecast.weather[0].main}
-                weatherDescription={forecast.weather[0].description}
+                weatherMain={entry.weather[0].main}
+                weatherDescription={entry.weather[0].description}
                 timeOfDay={cityDayOrNight(slot)}
               />
             ),
@@ -351,75 +351,58 @@ function Home({ weatherMain }) {
           };
         });
 
-        // Process forecast data for the week
         // Group by the city's own calendar day, so a slot near midnight lands
         // on the day it belongs to there rather than in UTC.
-        const groupedData = forecastData.reduce((acc, forecast) => {
-          const dayKey = cityDateKey(cityClock(forecast.dt, tzOffset));
-          if (!acc[dayKey]) {
-            acc[dayKey] = [];
-          }
-          acc[dayKey].push(forecast);
+        const byDay = slots.reduce((acc, entry) => {
+          const dayKey = cityDateKey(cityClock(entry.dt, tzOffset));
+          if (!acc[dayKey]) acc[dayKey] = [];
+          acc[dayKey].push(entry);
           return acc;
         }, {});
 
-        const processedForecastData2 = Object.keys(groupedData).map(
-          (date) => {
-            // A weekly row stands for a whole day, so it always takes the
-            // daytime glyph (this used to be derived from a hardcoded date).
-            const timeOfDay = "day";
-            const dayForecasts = groupedData[date];
-            const minTemp = Math.min(
-              ...dayForecasts.map((f) => f.main.temp_min)
-            );
-            const maxTemp = Math.max(
-              ...dayForecasts.map((f) => f.main.temp_max)
-            );
+        const weekly = Object.keys(byDay).map((date) => {
+          const dayForecasts = byDay[date];
+          const minTemp = Math.min(...dayForecasts.map((f) => f.main.temp_min));
+          const maxTemp = Math.max(...dayForecasts.map((f) => f.main.temp_max));
 
-            let formattedDateString = "";
-            if (date === todayDate) {
-              formattedDateString = "Today";
-            } else if (date === tomorrowDate) {
-              formattedDateString = "Tomorrow";
-            } else {
-              formattedDateString = weekdayLabel(date);
-            }
+          let label;
+          if (date === todayDate) label = "Today";
+          else if (date === tomorrowDate) label = "Tomorrow";
+          else label = weekdayLabel(date);
 
-            const description =
-              dayForecasts[0].weather[0].description.charAt(0).toUpperCase() +
-              dayForecasts[0].weather[0].description.slice(1).toLowerCase();
+          const dayDescription =
+            dayForecasts[0].weather[0].description.charAt(0).toUpperCase() +
+            dayForecasts[0].weather[0].description.slice(1).toLowerCase();
 
-            const weatherMain = dayForecasts[0].weather[0].main;
-            const weatherDescription = dayForecasts[0].weather[0].description;
+          return {
+            day: label,
+            image: (
+              <WeatherIcon
+                weatherMain={dayForecasts[0].weather[0].main}
+                weatherDescription={dayForecasts[0].weather[0].description}
+                // A weekly row stands for a whole day, so it always takes the
+                // daytime glyph.
+                timeOfDay="day"
+              />
+            ),
+            minTemp,
+            maxTemp,
+            description: dayDescription,
+          };
+        });
 
-            return {
-              day: formattedDateString,
-              image: (
-                <WeatherIcon
-                  weatherMain={weatherMain}
-                  weatherDescription={weatherDescription}
-                  timeOfDay={timeOfDay}
-                />
-              ),
-              minTemp,
-              maxTemp,
-              description: description,
-            };
-          }
-        );
-
-        setTodaysData(processedForecastData);
-        setData2(processedForecastData2);
+        setTodaysData(hourly);
+        setData2(weekly);
         setLoading(false);
         setError("");
-      } catch (error) {
+      } catch (err) {
         setLoading(false);
-        if (error.response && error.response.status === 404) {
+        if (err.response && err.response.status === 404) {
           setError("City not found. Please try again.");
         } else {
           setError("Failed to fetch weather data.");
         }
-        console.error("Error fetching weather data:", error);
+        console.error("Error fetching weather data:", err);
       }
     },
     [units]
@@ -427,204 +410,18 @@ function Home({ weatherMain }) {
 
   //Search box submit: fetch weather for whatever's in the city name field.
   const handleClick = useCallback(() => {
-    fetchAndSetWeatherByCity(name);
-  }, [name, fetchAndSetWeatherByCity]);
+    loadWeather({ city: name });
+  }, [name, loadWeather]);
 
-  //Fetch weather for an arbitrary city name (used by ?city= URL navigation,
-  //e.g. clicking a favourite from the Favourites page).
+  //?city= URL navigation, and saved rows with no coordinates on them.
   const fetchWeatherDataByCity = useCallback(
-    (city) => {
-      fetchAndSetWeatherByCity(city);
-    },
-    [fetchAndSetWeatherByCity]
+    (city) => loadWeather({ city }),
+    [loadWeather]
   );
 
-  //Data from the API being processed
   const fetchWeatherData = useCallback(
-    async (lat, long) => {
-      try {
-        setLoading(true);
-        const apiUrl = `/weather?lat=${lat}&lon=${long}&units=${units}`;
-        const apiUrl2 = `/forecast?lat=${lat}&lon=${long}&units=${units}`;
-
-        const [response, response2] = await Promise.all([
-          axios.get(apiUrl),
-          axios.get(apiUrl2),
-        ]);
-
-        console.log(response);
-        console.log(response2);
-
-        const weatherMain = response.data.weather[0].main;
-        const weatherDescription = response.data.weather[0].description;
-        const forecastWeather = response2.data.list.slice(0, 40);
-
-        // Day vs night from this location's own clock, not the viewer's -
-        // matters once this function is used for more than "wherever the
-        // browser's geolocation says I am" (see the search dropdown, which
-        // fetches by coordinates for exact, unambiguous matches).
-        const tzResponse = await axios.get(`/timeZone?lat=${lat}&lon=${long}`);
-        const cityNow = new Date(tzResponse.data.formatted);
-        const cityHour = cityNow.getHours();
-        const timeOfDay = cityHour >= 6 && cityHour < 18 ? "day" : "night";
-        const timeRefined = cityNow.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        });
-        setTimes({ time: timeRefined });
-
-        const tzOffset = response2.data.city.timezone || 0;
-        const todayDate = cityDateKey(cityClock(Date.now() / 1000, tzOffset));
-        const tomorrowDate = shiftDateKey(todayDate, 1);
-
-        // Hourly strip: a rolling 24 hours (eight 3-hourly slots) rather than
-        // "everything left in today", which late in the evening was one or two
-        // entries and read as broken.
-        const processedForecastData = forecastWeather.slice(0, 8).map((forecast) => {
-          const slot = cityClock(forecast.dt, tzOffset);
-          return {
-            celcius: forecast.main.temp,
-            image: (
-              <WeatherIcon
-                weatherMain={forecast.weather[0].main}
-                weatherDescription={forecast.weather[0].description}
-                timeOfDay={cityDayOrNight(slot)}
-              />
-            ),
-            time: cityTimeLabel(slot),
-          };
-        });
-
-        // Group by the city's own calendar day, so a slot near midnight lands
-        // on the day it belongs to there rather than in UTC.
-        const groupedData = forecastWeather.reduce((acc, forecast) => {
-          const dayKey = cityDateKey(cityClock(forecast.dt, tzOffset));
-          if (!acc[dayKey]) {
-            acc[dayKey] = [];
-          }
-          acc[dayKey].push(forecast);
-          return acc;
-        }, {});
-
-        const processedForecastData2 = Object.keys(groupedData).map(
-          (date) => {
-            // A weekly row stands for a whole day, so it always takes the
-            // daytime glyph (this used to be derived from a hardcoded date).
-            const timeOfDay = "day";
-            const dayForecasts = groupedData[date];
-            const minTemp = Math.min(
-              ...dayForecasts.map((f) => f.main.temp_min)
-            );
-            const maxTemp = Math.max(
-              ...dayForecasts.map((f) => f.main.temp_max)
-            );
-
-            let formattedDateString = "";
-            if (date === todayDate) {
-              formattedDateString = "Today";
-            } else if (date === tomorrowDate) {
-              formattedDateString = "Tomorrow";
-            } else {
-              formattedDateString = weekdayLabel(date);
-            }
-
-            const description =
-              dayForecasts[0].weather[0].description.charAt(0).toUpperCase() +
-              dayForecasts[0].weather[0].description.slice(1).toLowerCase();
-
-            const weatherMain = dayForecasts[0].weather[0].main;
-            const weatherDescription = dayForecasts[0].weather[0].description;
-
-            return {
-              day: formattedDateString,
-              image: (
-                <WeatherIcon
-                  weatherMain={weatherMain}
-                  weatherDescription={weatherDescription}
-                  timeOfDay={timeOfDay}
-                />
-              ),
-              minTemp,
-              maxTemp,
-              description: description,
-            };
-          }
-        );
-
-        setTodaysData(processedForecastData);
-        setData2(processedForecastData2);
-
-        // Same shift as the search path - these are unix UTC timestamps.
-        const cityOffset = response.data.timezone || 0;
-        const sunrise = cityTimeLabel(
-          cityClock(response.data.sys.sunrise, cityOffset)
-        );
-        const sunset = cityTimeLabel(
-          cityClock(response.data.sys.sunset, cityOffset)
-        );
-
-        const uv = await axios
-          .get(`/uv?lat=${lat}&lon=${long}`)
-          .then((r) => r.data)
-          .catch(() => null);
-
-        setMetrics(
-          buildMetrics({
-            current: response.data,
-            forecastList: response2.data.list,
-            uv,
-            units,
-          })
-        );
-        setSunProgress(
-          sunPosition(
-            response.data.dt,
-            response.data.sys.sunrise,
-            response.data.sys.sunset
-          )
-        );
-
-        const description =
-          response.data.weather[0].description.charAt(0).toUpperCase() +
-          response.data.weather[0].description.slice(1).toLowerCase();
-
-        setData({
-          celcius: response.data.main.temp,
-          name: response.data.name,
-          humidity: response.data.main.humidity,
-          speed: response.data.wind.speed,
-          image: (
-            <WeatherIcon
-              weatherMain={weatherMain}
-              weatherDescription={weatherDescription}
-              timeOfDay={timeOfDay}
-            />
-          ),
-          description: description,
-          country: response.data.sys.country,
-          tempMax: response.data.main.temp_max,
-          tempMin: response.data.main.temp_min,
-          feelsLike: response.data.main.feels_like,
-          sunrise: sunrise,
-          sunset: sunset,
-          // Drives the animated background (see components/WeatherCanvas).
-          condition: weatherMain,
-          timeOfDay: timeOfDay,
-        });
-        setLoading(false);
-        setError("");
-      } catch (error) {
-        setLoading(false);
-        if (error.response && error.response.status === 404) {
-          setError("City not found. Please try again.");
-        } else {
-          setError("Failed to fetch weather data.");
-        }
-        console.error("Error fetching weather data:", error);
-      }
-    },
-    [units]
+    (lat, lon) => loadWeather({ lat, lon }),
+    [loadWeather]
   );
 
   //Read ?city= from the URL, or fall back to geolocation (and if that's
@@ -707,11 +504,31 @@ function Home({ weatherMain }) {
   };
 
   //Adding a favourite city to the db
+  /*
+    Re-open a saved location by coordinate. Older rows were saved before
+    coordinates were persisted, so those still go through the name lookup -
+    imprecise, but it's all we have for them, and it's what they've always
+    done.
+  */
+  const openFavourite = (favourite) => {
+    setName(favourite.name);
+    if (typeof favourite.lat === "number" && typeof favourite.lon === "number") {
+      fetchWeatherData(favourite.lat, favourite.lon);
+      return;
+    }
+    setClickedFavourites(true);
+  };
+
   const addToFavourites = (name) => {
     axios
       .post(`/favourites`, {
         userId: currentUser.uid,
         name,
+        // Persist where this place actually is. Without it, re-opening the
+        // chip re-runs a name lookup, which is ambiguous enough to land in a
+        // different state (Ashland, Illinois came back as Ashland, Ohio).
+        lat: data.latitude,
+        lon: data.longitude,
       })
       .then((result) => {
         const newFavourite = result.data;
@@ -833,10 +650,7 @@ function Home({ weatherMain }) {
             {favourites.map((favourite) => (
               <button
                 key={favourite._id}
-                onClick={() => {
-                  setName(favourite.name);
-                  setClickedFavourites(true);
-                }}
+                onClick={() => openFavourite(favourite)}
                 className={`${pillClasses(
                   favourite.name === data.name
                 )} shrink-0 whitespace-nowrap`}
