@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios from "../lib/api.js";
 import React, { useEffect, useRef, useState } from "react";
 
 // Splits a geocoding match into the city and the qualifier that disambiguates

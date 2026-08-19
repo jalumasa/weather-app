@@ -55,5 +55,10 @@
     "cypress": "^13.13.2",
     "tailwindcss": "^4.3.3",
     "vercel": "^58.9.0"
+  },
+  "jest": {
+    "transformIgnorePatterns": [
+      "node_modules/(?!(axios)/)"
+    ]
   }
 }

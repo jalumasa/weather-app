@@ -30,3 +30,7 @@ serviceAccountKey.json
 src/tailwind.generated.css
 .vercel
 .env*
+
+# cypress artefacts
+cypress/screenshots/
+cypress/videos/

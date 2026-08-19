@@ -6,5 +6,13 @@ module.exports = defineConfig({
       framework: "create-react-app",
       bundler: "webpack",
     },
+    setupNodeEvents(on) {
+      on("task", {
+        log(message) {
+          console.log(message);
+          return null;
+        },
+      });
+    },
   },
 });

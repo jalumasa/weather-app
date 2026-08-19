@@ -1,5 +1,4 @@
 // App.js
-import axios from "axios";
 import React from "react";
 import { Toaster } from "react-hot-toast";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
@@ -10,8 +9,6 @@ import Home from "./pages/home";
 import Login from "./pages/login";
 import SignUp from "./pages/signup";
 import Navbar from "./source/navbar";
-
-axios.defaults.baseURL = "/api/";
 
 // The shell is a flat stage, dark or light depending on the reader. Any sense
 // of weather or time of day comes from the canvas the dashboard paints behind
