@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback, useRef } from "react";
 import { useState } from "react";
 import axios from "../lib/api.js";
 import { useLocation as useReactRouterLocation } from "react-router-dom";
@@ -22,6 +22,24 @@ import {
   buildMetrics,
   tempColor,
 } from "../lib/weather.js";
+
+/*
+  How old a reading has to be before returning to the tab refetches it.
+  OpenWeatherMap updates roughly every 10 minutes, so anything under a few
+  minutes would spend requests without changing the number on screen.
+*/
+const STALE_AFTER_MS = 5 * 60 * 1000;
+
+// "just now" / "4 min ago" / "2 hr ago" - deliberately coarse, because the
+// exact age of a reading isn't worth a precise number.
+const describeAge = (timestamp) => {
+  if (!timestamp) return null;
+  const minutes = Math.floor((Date.now() - timestamp) / 60000);
+  if (minutes < 1) return "updated just now";
+  if (minutes < 60) return `updated ${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  return `updated ${hours} hr ago`;
+};
 
 // Used when geolocation is denied or unavailable, so the app still has
 // something to show instead of getting stuck on "Failed to fetch weather data".
@@ -49,6 +67,13 @@ function Home({ weatherMain }) {
   const [times, setTimes] = useState([]);
   const [metrics, setMetrics] = useState(null);
   const [sunProgress, setSunProgress] = useState(0);
+  // What's currently on screen, so a refresh re-fetches the same place, and
+  // when it was last fetched. Held in refs as well as state so the focus
+  // listener can read them without re-subscribing on every update.
+  const lastQueryRef = useRef(null);
+  const lastUpdatedRef = useRef(0);
+  const [lastUpdated, setLastUpdated] = useState(0);
+  const [, setClockTick] = useState(0);
   const reactRouterLocation = useReactRouterLocation();
 
   /*
@@ -66,7 +91,7 @@ function Home({ weatherMain }) {
     means there is no second place left to forget.
   */
   const loadWeather = useCallback(
-    async (query) => {
+    async (query, { silent = false } = {}) => {
       const byName = typeof query.city === "string";
       if (byName && !query.city) return;
 
@@ -76,7 +101,9 @@ function Home({ weatherMain }) {
       const currentUrl = `${byName ? "/cityweather" : "/weather"}?${suffix}&units=${units}`;
       const forecastUrl = `${byName ? "/cityforecast" : "/forecast"}?${suffix}&units=${units}`;
 
-      setLoading(true);
+      // A refresh triggered by returning to the tab shouldn't blank the page
+      // out behind a spinner - it should just quietly become current.
+      if (!silent) setLoading(true);
       try {
         const [currentRes, forecastRes] = await Promise.all([
           axios.get(currentUrl),
@@ -153,9 +180,10 @@ function Home({ weatherMain }) {
           timeOfDay,
         });
 
-        // Only a deliberate search deserves a confirmation; geolocation and
-        // saved locations load without announcing themselves.
-        if (byName) {
+        // Only a deliberate search deserves a confirmation; geolocation,
+        // saved locations and background refreshes load without announcing
+        // themselves.
+        if (byName && !silent) {
           toast.success(
             query.city.charAt(0).toUpperCase() + query.city.slice(1).toLowerCase()
           );
@@ -226,9 +254,20 @@ function Home({ weatherMain }) {
 
         setTodaysData(hourly);
         setData2(weekly);
+        // Remember what's on screen so a refresh can re-fetch the same place,
+        // and when, so it only happens once the reading is actually stale.
+        lastQueryRef.current = query;
+        lastUpdatedRef.current = Date.now();
+        setLastUpdated(lastUpdatedRef.current);
         setLoading(false);
         setError("");
       } catch (err) {
+        if (silent) {
+          // A failed background refresh leaves the last good reading up
+          // rather than replacing it with an error.
+          console.error("Background refresh failed:", err);
+          return;
+        }
         setLoading(false);
         if (err.response && err.response.status === 404) {
           setError("City not found. Please try again.");
@@ -256,6 +295,40 @@ function Home({ weatherMain }) {
     (lat, lon) => loadWeather({ lat, lon }),
     [loadWeather]
   );
+
+  /*
+    Weather goes stale while a tab sits open. Coming back to it should show
+    what it's like now, not what it was like whenever the page was first
+    loaded - previously a tab left open overnight showed yesterday's
+    conditions under a clock that looked live.
+
+    Only refetches once the reading is actually old, so flicking between tabs
+    doesn't spend a request each time.
+  */
+  useEffect(() => {
+    const refreshIfStale = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!lastQueryRef.current) return;
+      if (Date.now() - lastUpdatedRef.current < STALE_AFTER_MS) return;
+      loadWeather(lastQueryRef.current, { silent: true });
+    };
+
+    window.addEventListener("focus", refreshIfStale);
+    document.addEventListener("visibilitychange", refreshIfStale);
+    return () => {
+      window.removeEventListener("focus", refreshIfStale);
+      document.removeEventListener("visibilitychange", refreshIfStale);
+    };
+  }, [loadWeather]);
+
+  // Keeps the "updated N ago" label honest without re-rendering a hidden tab.
+  useEffect(() => {
+    if (!lastUpdated) return undefined;
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") setClockTick((n) => n + 1);
+    }, 30000);
+    return () => clearInterval(id);
+  }, [lastUpdated]);
 
   //Read ?city= from the URL, or fall back to geolocation (and if that's
   //denied or unavailable, fall back further to a default city).
@@ -543,6 +616,14 @@ function Home({ weatherMain }) {
                   </>
                 ) : null}
               </p>
+
+              {/* Quiet, and only once the reading has some age on it - saying
+                  "updated just now" on every load would be noise. */}
+              {lastUpdated && Date.now() - lastUpdated >= 60000 ? (
+                <p className="mt-2 text-micro uppercase tracking-[0.14em] text-ink-500">
+                  {describeAge(lastUpdated)}
+                </p>
+              ) : null}
             </header>
 
             {/* Hourly */}

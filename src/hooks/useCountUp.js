@@ -21,8 +21,23 @@ function useCountUp(target, duration = 900) {
       "(prefers-reduced-motion: reduce)"
     ).matches;
 
-    // First paint and reduced-motion users get the final value immediately.
-    if (!hasAnimated.current || reduceMotion || from === numericTarget) {
+    /*
+      Set straight to the value, no animation, when animating would be wrong
+      or pointless: the first paint, reduced motion, no actual change - or a
+      hidden tab.
+
+      That last one is not a nicety. Browsers pause requestAnimationFrame in
+      background tabs, so a reading that arrived while the tab was hidden
+      would stall part-way through its count and sit there. In practice it sat
+      at 0, because the initial empty render consumes the first-paint guard
+      and leaves the first real temperature to animate up from nothing.
+    */
+    if (
+      !hasAnimated.current ||
+      reduceMotion ||
+      from === numericTarget ||
+      document.hidden
+    ) {
       hasAnimated.current = true;
       setValue(numericTarget);
       return undefined;
