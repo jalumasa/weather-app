@@ -15,13 +15,27 @@
       user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
     -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+
+    <!--
+      Inter is the face this interface was drawn for, so it's loaded rather
+      than merely named: it sat first in the CSS font stack while nothing ever
+      fetched it, which meant the design silently rendered in whatever the
+      operating system happened to supply - San Francisco here, Segoe UI on
+      Windows, Roboto on Android.
+
+      Only the four weights the design actually uses (200/300/400/500), and
+      preconnected so the request starts before the CSS is parsed. `swap`
+      keeps text readable while it loads instead of leaving a blank page.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/icon?family=Material+Icons"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500&display=swap"
     />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/icon?family=Material+Symbols"
+      href="https://fonts.googleapis.com/icon?family=Material+Icons"
     />
     <script
       src="https://kit.fontawesome.com/9f5e3374e8.js"

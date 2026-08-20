@@ -73,6 +73,7 @@ function Home({ weatherMain }) {
   const lastQueryRef = useRef(null);
   const lastUpdatedRef = useRef(0);
   const [lastUpdated, setLastUpdated] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const [, setClockTick] = useState(0);
   const reactRouterLocation = useReactRouterLocation();
 
@@ -295,6 +296,20 @@ function Home({ weatherMain }) {
     (lat, lon) => loadWeather({ lat, lon }),
     [loadWeather]
   );
+
+  /*
+    Asking for a refresh directly. Unlike the automatic one this ignores the
+    staleness window - if someone asks, they get a fetch - but it stays silent
+    in the same way, so the dashboard doesn't blank out to reload the same
+    place.
+  */
+  const handleManualRefresh = useCallback(() => {
+    if (!lastQueryRef.current || refreshing) return;
+    setRefreshing(true);
+    loadWeather(lastQueryRef.current, { silent: true }).finally(() =>
+      setRefreshing(false)
+    );
+  }, [loadWeather, refreshing]);
 
   /*
     Weather goes stale while a tab sits open. Coming back to it should show
@@ -617,12 +632,21 @@ function Home({ weatherMain }) {
                 ) : null}
               </p>
 
-              {/* Quiet, and only once the reading has some age on it - saying
-                  "updated just now" on every load would be noise. */}
-              {lastUpdated && Date.now() - lastUpdated >= 60000 ? (
-                <p className="mt-2 text-micro uppercase tracking-[0.14em] text-ink-500">
-                  {describeAge(lastUpdated)}
-                </p>
+              {/*
+                The age of the reading doubles as the way to refresh it. It's
+                shown as soon as there's data rather than only once it's a
+                minute old: as a control it needs to be somewhere findable,
+                not appear later out of nowhere.
+              */}
+              {lastUpdated ? (
+                <button
+                  onClick={handleManualRefresh}
+                  disabled={refreshing}
+                  aria-label="Refresh weather"
+                  className="mt-3 text-micro uppercase tracking-[0.14em] text-ink-500 transition-colors hover:text-ink-300 disabled:cursor-default disabled:text-ink-500"
+                >
+                  {refreshing ? "refreshing…" : describeAge(lastUpdated)}
+                </button>
               ) : null}
             </header>
 

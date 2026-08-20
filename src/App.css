@@ -1,4 +1,0 @@
-/* Roboto backs the body stack on platforms that don't ship a system UI face
-   the design can borrow (see tailwind-input.css). Apple platforms never reach
-   it; Android and most Linux desktops do. */
-@import url("https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap");
