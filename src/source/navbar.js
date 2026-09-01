@@ -1,5 +1,6 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import { toast } from "react-hot-toast";
 import { useAuth } from "../contexts/AuthContext";
 import { useTheme } from "../contexts/ThemeContext";
 
@@ -19,7 +20,8 @@ export default function Navbar() {
     try {
       await logout();
     } catch (err) {
-      console.log(err);
+      console.error("Sign out failed:", err);
+      toast.error("Couldn't sign out");
     }
   };
 

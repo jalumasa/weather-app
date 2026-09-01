@@ -1,6 +1,7 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "RainCoat",
+  "name": "RainCoat - weather",
+  "description": "Weather for anywhere, read in that place's own clock.",
   "icons": [
     {
       "src": "favicon.ico",
@@ -20,6 +21,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#0a0a0a",
+  "background_color": "#0a0a0a"
 }

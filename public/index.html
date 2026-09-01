@@ -4,11 +4,22 @@
     <meta charset="utf-8" />
     <link rel="icon" type="image/png" href="%PUBLIC_URL%/logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
+    <!--
+      One theme-color, driven by the same code that picks the theme. Media
+      queries alone would follow the operating system and so contradict the
+      in-app toggle; the value here is just the default before script runs.
+    -->
+    <meta id="theme-color" name="theme-color" content="#0a0a0a" />
     <meta
       name="description"
-      content="Web site created using create-react-app"
+      content="Weather for anywhere, read in that place's own clock - hourly and 7-day forecasts, wind, UV and daylight."
     />
+    <meta property="og:title" content="RainCoat" />
+    <meta
+      property="og:description"
+      content="Weather for anywhere, read in that place's own clock."
+    />
+    <meta property="og:type" content="website" />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
     <!--
       manifest.json provides metadata used when your web app is installed on a
@@ -68,6 +79,10 @@
               : "dark";
           document.documentElement.setAttribute("data-theme", theme);
           document.documentElement.style.colorScheme = theme;
+          var meta = document.getElementById("theme-color");
+          if (meta) {
+            meta.setAttribute("content", theme === "light" ? "#f2f2f3" : "#0a0a0a");
+          }
         } catch (e) {
           document.documentElement.setAttribute("data-theme", "dark");
         }

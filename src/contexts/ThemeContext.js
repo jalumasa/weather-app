@@ -37,6 +37,12 @@ export function ThemeProvider({ children }) {
     document.documentElement.setAttribute("data-theme", theme);
     // Lets the browser paint form controls and scrollbars to match.
     document.documentElement.style.colorScheme = theme;
+    // Keeps the browser/OS chrome in step with an in-app toggle, which a
+    // prefers-color-scheme media query could never do.
+    const themeColor = document.getElementById("theme-color");
+    if (themeColor) {
+      themeColor.setAttribute("content", theme === "light" ? "#f2f2f3" : "#0a0a0a");
+    }
   }, [theme]);
 
   useEffect(() => {

@@ -53,7 +53,6 @@ function Home({ weatherMain }) {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [favourites, setFavourites] = useState([]);
-  const [isFavourite, setIsFavourite] = useState(false);
   const [todaysData, setTodaysData] = useState([]);
   const [location, setLocation] = useState({
     latitude: "",
@@ -401,7 +400,9 @@ function Home({ weatherMain }) {
         setFavourites(sortedFavourites);
       })
       .catch((err) => {
-        console.log(err);
+        // Quiet on purpose: the chip row simply doesn't appear. Nothing the
+        // reader can act on, and the dashboard itself is unaffected.
+        console.error("Could not load saved locations:", err);
       });
   }, [currentUser]);
 
@@ -454,13 +455,14 @@ function Home({ weatherMain }) {
       .then((result) => {
         const newFavourite = result.data;
         setFavourites((prevFavourites) => [...prevFavourites, newFavourite]);
-        console.log(isFavourite);
-        setIsFavourite(true);
 
         toast.success(`Added '${name}' to favourites`);
       })
       .catch((err) => {
-        console.log(err);
+        // Failing silently here read as success: the bookmark filled in and
+        // nothing was saved.
+        console.error("Could not save location:", err);
+        toast.error(`Couldn't save '${name}'`);
       });
   };
 
@@ -471,10 +473,10 @@ function Home({ weatherMain }) {
       setFavourites((prevFavourites) =>
         prevFavourites.filter((fav) => fav._id !== id)
       );
-      setIsFavourite(false);
       toast.error(`Removed '${name}' from favourites`);
     } catch (error) {
-      console.log(error);
+      console.error("Could not remove saved location:", error);
+      toast.error(`Couldn't remove '${name}'`);
     }
   };
 
